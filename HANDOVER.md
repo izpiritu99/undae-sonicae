@@ -685,6 +685,8 @@ Keep the Linux and Android paths as they are, since they cannot be tested on Win
 
 Commit on a branch named `windows`. To carry it back by USB, push that branch to the copy on the stick, for example
 `git push E:\undae-sonicae windows`. The stick's copy has `main` checked out, so pushing another branch to it is allowed.
+FAT32 records no file owner, so Git for Windows may call that repository "dubious ownership". Its message gives the
+`git config --global --add safe.directory ...` line that allows it.
 On the laptop, run `git fetch /run/media/izpiritu/TINGS/undae-sonicae windows`, then merge `FETCH_HEAD` and check that
 the Linux build and the self-test still pass. The laptop repository has the stick as the remote `tings`, so
 `git fetch tings windows` also works there.
