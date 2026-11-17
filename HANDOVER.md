@@ -594,7 +594,9 @@ The project came on the USB drive "TINGS" (FAT32) as `undae-sonicae/`. Copy that
 example `C:\dev\undae-sonicae`) and work there: building on a FAT32 stick is slow, and it cannot hold files over 4 GB.
 
 - The folder is a git repository (branch `main`). Build output, `node_modules`, the packages in `dist/` and `builds/`,
-  and JUCE are not tracked (see `.gitignore`). Line endings are LF (`.gitattributes`); MSVC is fine with that.
+  and JUCE are not tracked (see `.gitignore`). Files are stored as they are on Linux. `.gitattributes` keeps the shell
+  scripts LF, and keeps the JUCE patch and the Projucer output (`cpp/JuceLibraryCode`) byte-exact. Do not let an editor
+  or a renormalise change their line endings: the patch must match JUCE's CRLF `juce_PopupMenu.cpp`.
 - JUCE 8.0.15 comes separately as `JUCE-8.0.15-patched.zip` at the top of the stick. It is one file because copying its
   4,450 files to the stick one by one was very slow. Extract it into `cpp\third_party\` so that
   `cpp\third_party\JUCE\CMakeLists.txt` exists, with Explorer's "Extract All" or
