@@ -847,3 +847,21 @@ Instruments (the synth already covers most subtractive and FM jobs; these fill w
 
 Suggested order: 1 (EQ) and 2 (de-esser) together, as they share filters and sit on nearly every vocal; then 4, 3,
 6, 7; then the tempo-aware 8 and 9; then 10 and 12.
+
+### Built so far (2026-11-17, Windows)
+
+The first four from the list are built-in effects now. Each is in `Effects.cpp` (`makeEffect`), in the Mixer's
+"+ Add effect" menu and Sound Design (`fxSpecs()` in `Doc.cpp`), and checked by `undae-selftest` (27 / 27 on Windows):
+- **Parametric EQ** (`peq`, item 1): low cut off / 12 / 24 dB/oct, low shelf, three peaks with width, high shelf, high
+  cut, output. Check: +12 dB band at 1 kHz measures +12.0 dB; 24 dB/oct cut at 200 Hz leaves 50 Hz at -48 dB.
+- **De-esser** (`deess`, item 2): detector above "From Hz", 4:1 above the threshold up to "Range" dB; turns down only
+  the highs (4th-order Linkwitz-Riley split) or the whole signal; Listen plays the high band. Check: a loud 10 kHz tone
+  is turned down 10 dB, 200 Hz is untouched.
+- **Saturator** (`sat`, item 4): tube / tape / transformer / clip / exciter, 4x oversampled with integer latency (the dry
+  path is delayed to match), level-compensated. Check: tube mode gives a 2nd harmonic at -18 dB with the level held.
+- **Vault reverb** (`fdn`, item 7): hall / room / plate / gated, 8-line FDN. Check: a 2 s decay falls 33 dB in one
+  second (30 in theory). Every saturator and reverb mode at full settings stays finite and bounded.
+
+Not done yet: these effects are not in the Electron edition (see the caution above: opening such a project there fails
+until `fx.js` gets them or a pass-through); no response-curve or gain-reduction display yet; not tried by ear in the app
+window. Next in the order: gate (3), transient shaper (5), stereo imager (6), then the tempo-aware delay and glitch.

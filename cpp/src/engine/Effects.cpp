@@ -269,6 +269,204 @@ public:
     }
 };
 
+// --- built-in replacements for third-party plug-in jobs (see HANDOVER.md, "Built-in instruments and effects") ---------
+
+// Low/high-pass Q in Web Audio's dB form: Butterworth 2nd order (-3.01 dB), or the two stages of a 4th-order Butterworth.
+constexpr double Q_BW2 = -3.0103, Q_BW4A = -5.3329, Q_BW4B = 2.3222;
+inline int slopeOf(const std::string& s) { return s == "12 dB/oct" ? 1 : s == "24 dB/oct" ? 2 : 0; }
+
+// Parametric EQ: high-pass, low shelf, three peaks, high shelf, low-pass (RBJ cookbook biquads), output trim.
+class ParamEq : public Effect {
+    enum { HP1, HP2, LS, P1, P2, P3, HS, LP1, LP2, NB };
+    Biquad2 b[NB]; bool on[NB] = {}; double v[18] = {}; bool dirty = true; double out = 1;
+    static constexpr const char* K[18] = { "hpf", "hps", "lsf", "lsg", "p1f", "p1g", "p1q", "p2f", "p2g", "p2q", "p3f", "p3g", "p3q", "hsf", "hsg", "lpf", "lps", "out" };
+public:
+    void set(const FxSlot& f) override {
+        double n[18];
+        for (int i = 0; i < 18; i++) n[i] = (i == 1 || i == 16) ? slopeOf(f.str(K[i], "off")) : f.num(K[i], 0);
+        for (int i = 0; i < 18; i++) if (n[i] != v[i]) { std::copy(n, n + 18, v); dirty = true; break; }
+    }
+    void process(float* L, float* R, int n) override {
+        if (dirty) {
+            dirty = false;
+            const int hs = (int)v[1], ls = (int)v[16];
+            auto put = [&](int i, FilterType t, double fr, double q, double g, bool o) { on[i] = o; if (o) { b[i].setType(t); b[i].set(sr, fr, q, g); } };
+            put(HP1, FilterType::Highpass, v[0], hs == 2 ? Q_BW4A : Q_BW2, 0, hs >= 1); put(HP2, FilterType::Highpass, v[0], Q_BW4B, 0, hs == 2);
+            put(LS, FilterType::Lowshelf, v[2], 1, v[3], v[3] != 0);
+            put(P1, FilterType::Peaking, v[4], v[6], v[5], v[5] != 0); put(P2, FilterType::Peaking, v[7], v[9], v[8], v[8] != 0); put(P3, FilterType::Peaking, v[10], v[12], v[11], v[11] != 0);
+            put(HS, FilterType::Highshelf, v[13], 1, v[14], v[14] != 0);
+            put(LP1, FilterType::Lowpass, v[15], ls == 2 ? Q_BW4A : Q_BW2, 0, ls >= 1); put(LP2, FilterType::Lowpass, v[15], Q_BW4B, 0, ls == 2);
+            out = dbToGain(v[17]);
+        }
+        for (int k = 0; k < NB; k++) if (on[k]) for (int i = 0; i < n; i++) b[k].tick(L[i], R[i]);
+        if (out != 1) for (int i = 0; i < n; i++) { L[i] *= (float)out; R[i] *= (float)out; }
+    }
+};
+
+// De-esser: the level above `freq` (2nd-order high-pass of the mono sum, fast peak follower) drives a gain reduction of
+// up to `range` dB above `thr` (4:1). "Split" turns down only the band above `freq`, split by a 4th-order Linkwitz-Riley
+// crossover (the two bands sum back flat, only the phase turns); "wide" turns down everything. Listen plays the high band.
+class DeEsser : public Effect {
+    Biquad det; Biquad2 lo1, lo2, hi1, hi2; double freq = -1, thr = -30, range = 10, env = 0, gr = 0; bool split = true, listen = false;
+public:
+    double reductionDb() const { return gr; }
+    void set(const FxSlot& f) override {
+        const double fr = f.num("freq", 6000); thr = f.num("thr", -30); range = f.num("range", 10);
+        split = f.str("mode", "split") != "wide"; listen = f.str("listen", "off") == "on";
+        if (fr != freq) {
+            freq = fr; det.type = FilterType::Highpass; det.set(sr, freq, Q_BW2, 0);
+            for (Biquad2* q : { &lo1, &lo2 }) { q->setType(FilterType::Lowpass); q->set(sr, freq, Q_BW2, 0); }
+            for (Biquad2* q : { &hi1, &hi2 }) { q->setType(FilterType::Highpass); q->set(sr, freq, Q_BW2, 0); }
+        }
+    }
+    void process(float* L, float* R, int n) override {
+        const double a = std::exp(-1 / (0.0005 * sr)), r = std::exp(-1 / (0.06 * sr)), gs = std::exp(-1 / (0.002 * sr));
+        for (int i = 0; i < n; i++) {
+            const double h = det.tick(0.5 * (L[i] + R[i])), x = std::abs(h);
+            env = x > env ? a * env + (1 - a) * x : r * env + (1 - r) * x;
+            const double lv = env > 1e-9 ? 20 * std::log10(env) : -180;
+            const double want = std::min(range, std::max(0.0, (lv - thr) * 0.75));
+            gr = gs * gr + (1 - gs) * want;
+            const double g = dbToGain(-gr);
+            if (split || listen) {
+                float hl = L[i], hr = R[i], ll = L[i], lr = R[i];
+                hi1.tick(hl, hr); hi2.tick(hl, hr); lo1.tick(ll, lr); lo2.tick(ll, lr);
+                if (listen) { L[i] = hl; R[i] = hr; continue; }
+                L[i] = (float)(ll + hl * g); R[i] = (float)(lr + hr * g);
+            } else { L[i] = (float)(L[i] * g); R[i] = (float)(R[i] * g); }
+        }
+    }
+};
+
+// Saturator: four-times oversampled wave shaping (JUCE's half-band FIR oversampler, integer latency, so the dry path can
+// be delayed to match). Modes: tube (biased tanh: even harmonics), tape (soft arctan with a low bump before and the top
+// rolled off by drive), transformer (the lows saturate more than the highs), clip (cubic soft clip), exciter (only the
+// band above `band` is driven, then added). Level is compensated so a -10 dBFS tone keeps about its level.
+class Saturator : public Effect {
+    std::unique_ptr<juce::dsp::Oversampling<float>> os; juce::AudioBuffer<float> buf; int lat = 0; DelayLine dl, dr;
+    std::string mode = "tube"; double drive = 1, bias = 0.2, tone = -1, band = -1, comp = 1, out = 1; WetDry m;
+    Biquad2 bump, toneLp, exHp, lowSplit, dc; double lastDrive = -1; std::string lastMode;
+    double shape(double x, double lo) const {   // lo: the low band of x (transformer)
+        if (mode == "tube") { const double k = bias * 0.6; return std::tanh(x + k) - std::tanh(k); }
+        if (mode == "tape") return 2 / PI * std::atan(x * PI / 2);
+        if (mode == "transformer") { (void)x; double y = clampd(lo * 1.6, -1.5, 1.5); y = y - y * y * y * 4 / 27; return y / 1.6; }   // the low band only: the caller adds the highs back undriven
+        if (mode == "exciter") return std::tanh(x);
+        const double c = clampd(x, -1, 1); return 1.5 * c - 0.5 * c * c * c;   // clip
+    }
+public:
+    void prepare(double s, int b) override {
+        Effect::prepare(s, b);
+        os = std::make_unique<juce::dsp::Oversampling<float>>(2, 2, juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple, true, true);
+        os->initProcessing((size_t)std::max(b, 4096)); lat = (int)std::lround(os->getLatencyInSamples());
+        buf.setSize(2, std::max(b, 4096)); dl.init((size_t)lat + 8); dr.init((size_t)lat + 8);
+        bump.setType(FilterType::Peaking); toneLp.setType(FilterType::Lowpass); exHp.setType(FilterType::Highpass); lowSplit.setType(FilterType::Lowpass); dc.setType(FilterType::Highpass);
+        lowSplit.set(s * 4, 250, Q_BW2, 0); dc.set(s, 12, Q_BW2, 0); bump.set(s * 4, 90, 0.8, 2.5);
+    }
+    void set(const FxSlot& f) override {
+        mode = f.str("mode", "tube"); drive = dbToGain(f.num("drive", 6)); bias = f.num("bias", 0.2); m.mix(f.num("mix", 1)); out = dbToGain(f.num("out", 0));
+        const double t = f.num("tone", 14000), bd = f.num("band", 3000);
+        if (t != tone || drive != lastDrive || mode != lastMode) { tone = t; toneLp.set(sr, mode == "tape" ? std::min(t, 20000 / std::sqrt(drive)) : t, Q_BW2, 0); }
+        if (bd != band) { band = bd; exHp.set(sr * 4, band, Q_BW2, 0); }
+        if (drive != lastDrive || mode != lastMode) {   // level compensation, measured on a -10 dBFS sine through the curve
+            lastDrive = drive; lastMode = mode; double in2 = 0, o2 = 0;
+            for (int i = 0; i < 64; i++) { const double x = 0.316 * std::sin(2 * PI * i / 64); const double y = mode == "exciter" ? x : shape(x * drive, mode == "transformer" ? x * drive : 0); in2 += x * x; o2 += y * y; }
+            comp = mode == "exciter" ? 1 : std::sqrt(in2 / std::max(1e-12, o2));
+        }
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        float* io[2] = { buf.getWritePointer(0), buf.getWritePointer(1) };
+        std::copy(L, L + n, io[0]); std::copy(R, R + n, io[1]);
+        juce::dsp::AudioBlock<float> blk(io, 2, (size_t)n);
+        auto up = os->processSamplesUp(blk);
+        float* u[2] = { up.getChannelPointer(0), up.getChannelPointer(1) };
+        const size_t N = up.getNumSamples(); const double exAmt = 0.35 * (1 - 1 / drive);
+        for (size_t i = 0; i < N; i++) {
+            float l = u[0][i], r = u[1][i];
+            if (mode == "exciter") { float hl = l, hr = r; exHp.tick(hl, hr); l = (float)(l + exAmt * std::tanh(hl * drive)); r = (float)(r + exAmt * std::tanh(hr * drive)); }
+            else {
+                if (mode == "tape") bump.tick(l, r);
+                float ll = 0, lr = 0; if (mode == "transformer") { ll = l; lr = r; lowSplit.tick(ll, lr); }
+                if (mode == "transformer") { l = (float)(shape(0, ll * drive) * comp + (l - ll)); r = (float)(shape(0, lr * drive) * comp + (r - lr)); }
+                else { l = (float)shape(l * drive, 0); r = (float)shape(r * drive, 0); }
+            }
+            u[0][i] = l; u[1][i] = r;
+        }
+        os->processSamplesDown(blk);
+        const double g = (mode == "transformer" ? 1.0 : comp) * out;   // transformer: compensated inside, on the low band
+        for (int i = 0; i < n; i++) {
+            float l = io[0][i], r = io[1][i]; toneLp.tick(l, r); if (mode == "tube") dc.tick(l, r);
+            dl.push(L[i]); dr.push(R[i]); const float xl = lat ? dl.read(lat) : L[i], xr = lat ? dr.read(lat) : R[i];
+            L[i] = (float)(xl * m.dry + l * g * m.wet); R[i] = (float)(xr * m.dry + r * g * m.wet);
+        }
+    }
+    int latency() const { return lat; }
+};
+
+// Algorithmic reverb: 8-line feedback delay network (Jot), orthonormal Hadamard mixing, mutually prime line lengths,
+// four input diffusion all-passes, a one-pole low-pass in every line for the high-frequency decay, gentle modulation of
+// four lines. Each line's gain gives the RT60 asked for: g = 10^(-3 len / (RT60 sr)). "Gated" holds the tail open while
+// the input is loud and shuts it `decay` seconds after (capped at 1.5 s), the classic gated drum sound.
+class FdnReverb : public Effect {
+    static constexpr int NL = 8;
+    DelayLine line[NL], diff[4], pre; double len[NL] = {}, g[NL] = {}, lp[NL] = {}, dlen[4] = {}, ph[NL] = {};
+    std::string mode = "hall"; double decay = 2.5, size = 1, damp = 6000, preMs = 15, mod = 0.3, width = 1, dampK = 0, genv = 0, gate = 0, hold = 0;
+    WetDry m; std::string lastMode; double lastSize = -1, lastDecay = -1;
+    void layout() {
+        static const double hall[NL] = { 29.7, 37.1, 41.1, 43.7, 53.3, 59.9, 67.7, 73.1 }, plate[NL] = { 11.3, 13.7, 17.9, 19.1, 23.3, 26.9, 31.1, 34.7 };
+        const double* base = mode == "plate" ? plate : hall; const double sc = (mode == "room" ? 0.42 : mode == "gated" ? 0.6 : 1.0) * size;
+        const double rt = mode == "gated" ? 3.0 : decay;
+        for (int k = 0; k < NL; k++) { len[k] = std::max(8.0, base[k] * sc * 0.001 * sr); g[k] = std::pow(10.0, -3 * len[k] / (rt * sr)); }
+        static const double dms[4] = { 4.77, 3.59, 12.73, 9.31 };
+        for (int k = 0; k < 4; k++) dlen[k] = std::max(2.0, dms[k] * (mode == "plate" ? 1.3 : 1.0) * std::min(size, 1.5) * 0.001 * sr);
+    }
+public:
+    void prepare(double s, int b) override {
+        Effect::prepare(s, b);
+        for (auto& d : line) d.init((size_t)(0.08 * 2.1 * s) + 64);
+        for (auto& d : diff) d.init((size_t)(0.02 * s) + 8);
+        pre.init((size_t)(0.25 * s) + 8);
+        for (int k = 0; k < NL; k++) ph[k] = k * 0.137;
+        layout();
+    }
+    void set(const FxSlot& f) override {
+        mode = f.str("mode", "hall"); decay = f.num("decay", 2.5); size = clampd(f.num("size", 1), 0.3, 2); damp = f.num("damp", 6000);
+        preMs = f.num("pre", 15); mod = f.num("mod", 0.3); width = f.num("width", 1); m.mix(f.num("mix", 0.25));
+        dampK = 1 - std::exp(-2 * PI * std::min(damp, sr * 0.45) / sr);
+        if (mode != lastMode || size != lastSize || decay != lastDecay) { lastMode = mode; lastSize = size; lastDecay = decay; layout(); }
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double pd = std::max(1.0, preMs * 0.001 * sr), md = mod * 0.0012 * sr, ga = std::exp(-1 / (0.001 * sr)), gr = std::exp(-1 / (0.03 * sr));
+        const double holdS = std::min(decay, 1.5);
+        for (int i = 0; i < n; i++) {
+            const double in = 0.5 * (L[i] + R[i]);
+            pre.push((float)in); double x = pre.read(pd);
+            for (int k = 0; k < 4; k++) { const double d = diff[k].read(dlen[k]); const double v = x + 0.6 * d; diff[k].push((float)v); x = d - 0.6 * v; }   // Schroeder all-pass
+            double y[NL];
+            for (int k = 0; k < NL; k++) {
+                double dd = len[k];
+                if (k < 4 && md > 0) { ph[k] += (0.31 + 0.23 * k) / sr; ph[k] -= std::floor(ph[k]); dd += md * std::sin(2 * PI * ph[k]); }
+                const double v = line[k].read(dd); lp[k] += dampK * (v - lp[k]); y[k] = lp[k] * g[k];
+            }
+            // 8-point fast Walsh-Hadamard transform, scaled to be orthonormal (energy kept, the decay comes from g)
+            for (int h = 1; h < NL; h <<= 1) for (int a = 0; a < NL; a += h << 1) for (int b = a; b < a + h; b++) { const double u = y[b], w = y[b + h]; y[b] = u + w; y[b + h] = u - w; }
+            for (int k = 0; k < NL; k++) line[k].push((float)(y[k] * 0.35355339059327373 + x * ((k & 1) ? -0.5 : 0.5)));
+            double wl = 0, wr = 0;
+            for (int k = 0; k < NL; k++) { const double v = lp[k]; if (k & 1) wr += (k & 2) ? -v : v; else wl += (k & 2) ? -v : v; }
+            wl *= 0.5; wr *= 0.5;
+            if (mode == "gated") {
+                const double e = std::abs(in); genv = e > genv ? ga * genv + (1 - ga) * e : gr * genv + (1 - gr) * e;
+                if (genv > 0.03) hold = holdS * sr; else if (hold > 0) hold--;
+                const double tgt = hold > 0 ? 1.0 : 0.0; gate += (tgt - gate) * (tgt > gate ? 0.01 : 0.0015);
+                wl *= gate; wr *= gate;
+            }
+            const double mid = 0.5 * (wl + wr), side = 0.5 * (wl - wr) * width;
+            L[i] = (float)(L[i] * m.dry + (mid + side) * m.wet); R[i] = (float)(R[i] * m.dry + (mid - side) * m.wet);
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -289,6 +487,10 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "dist") return std::make_unique<Dist>();
     if (t == "crush") return std::make_unique<Crush>();
     if (t == "duck") return std::make_unique<Duck>();
+    if (t == "peq") return std::make_unique<ParamEq>();
+    if (t == "deess") return std::make_unique<DeEsser>();
+    if (t == "sat") return std::make_unique<Saturator>();
+    if (t == "fdn") return std::make_unique<FdnReverb>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 

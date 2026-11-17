@@ -5,6 +5,7 @@
 #include "app/Doc.h"
 #include "engine/Analysis.h"
 #include "engine/SoundDesign.h"
+#include "engine/Effects.h"
 
 static int fails = 0;
 static void check(bool ok, const std::string& what) { std::cout << (ok ? "PASS  " : "FAIL  ") << what << "\n"; if (!ok) fails++; }
@@ -128,6 +129,51 @@ int main(int argc, char** argv) {
         check(std::abs(bpm - 92) < 2 || std::abs(bpm - 184) < 3 || std::abs(bpm - 46) < 1, "tempo of the demo song: " + std::to_string(bpm) + " BPM (92)");
         auto kick = us::renderDesign(us::designPresets()[0].second, *bank); float pk = 0; for (float v : kick->ch[0]) pk = std::max(pk, std::abs(v));
         check(kick->ch.size() == 1 && std::abs(kick->seconds() - 0.5) < 0.01 && std::abs(pk - 0.95f) < 0.01f, "sound design: the Kick preset renders 0.5 s, normalised");
+    }
+    // built-in effects that stand in for third-party plug-ins: each made from its UI spec, so engine and app agree on names
+    {
+        const double sr = 48000; const int N = 48000;
+        auto runFx = [&](const us::FxSlot& f, std::vector<float> x) {   // mono test signal on both sides, processed in blocks
+            auto e = us::makeEffect(f.type); e->prepare(sr, 512); e->set(f); std::vector<float> L = x, R = x;
+            for (int o = 0; o < N; o += 512) e->process(L.data() + o, R.data() + o, std::min(512, N - o));
+            return L;
+        };
+        auto sine = [&](double hz, double amp) { std::vector<float> v((size_t)N); for (int i = 0; i < N; i++) v[(size_t)i] = (float)(amp * std::sin(2 * 3.14159265358979 * hz * i / sr)); return v; };
+        auto lvl = [&](const std::vector<float>& v) { double s = 0; for (int i = N / 2; i < N; i++) s += (double)v[(size_t)i] * v[(size_t)i]; return 10 * std::log10(s / (N / 2) + 1e-30); };   // dB, second half
+        auto tone = [&](const std::vector<float>& v, double hz) {   // amplitude of one frequency over the second half (correlation)
+            double c = 0, s = 0; for (int i = N / 2; i < N; i++) { const double w = 2 * 3.14159265358979 * hz * i / sr; c += v[(size_t)i] * std::cos(w); s += v[(size_t)i] * std::sin(w); }
+            return 2 * std::sqrt(c * c + s * s) / (N / 2);
+        };
+        bool specs = true; for (const char* t : { "peq", "deess", "sat", "fdn" }) specs &= ui::fxSpec(t) != nullptr;
+        check(specs, "new built-in effects listed for the mixer (Parametric EQ, De-esser, Saturator, Vault reverb)");
+
+        auto eq = ui::newFx("peq"); eq.p.set("p2f", 1000.0); eq.p.set("p2g", 12.0); eq.p.set("hps", juce::String("24 dB/oct")); eq.p.set("hpf", 200.0);
+        const double at1k = lvl(runFx(eq, sine(1000, 0.1))) - lvl(sine(1000, 0.1)), at50 = lvl(runFx(eq, sine(50, 0.1))) - lvl(sine(50, 0.1)), at4k = lvl(runFx(eq, sine(4000, 0.1))) - lvl(sine(4000, 0.1));
+        check(std::abs(at1k - 12) < 0.5 && at50 < -20 && std::abs(at4k) < 2.5, "parametric EQ: +12 dB band at 1 kHz gives " + std::to_string(at1k) + " dB, 24 dB/oct low cut at 200 Hz leaves 50 Hz at " + std::to_string(at50) + " dB, 4 kHz at " + std::to_string(at4k) + " dB");
+
+        auto ds = ui::newFx("deess"); ds.p.set("thr", -40.0); ds.p.set("range", 12.0);
+        const double ess = lvl(runFx(ds, sine(10000, 0.5))) - lvl(sine(10000, 0.5)), low = lvl(runFx(ds, sine(200, 0.5))) - lvl(sine(200, 0.5));
+        check(ess < -7 && std::abs(low) < 0.5, "de-esser: a loud 10 kHz tone is turned down " + std::to_string(-ess) + " dB, 200 Hz changes " + std::to_string(low) + " dB");
+
+        auto sat = ui::newFx("sat"); sat.p.set("drive", 18.0); sat.p.set("bias", 0.6);
+        auto sy = runFx(sat, sine(200, 0.3)); const double h2 = tone(sy, 400) / tone(sy, 200), gain = lvl(sy) - lvl(sine(200, 0.3));
+        bool finite = true; for (float v : sy) finite &= std::isfinite(v);
+        check(finite && h2 > 0.02 && std::abs(gain) < 4, "saturator (tube): 2nd harmonic at " + std::to_string(20 * std::log10(h2)) + " dB of the fundamental, level change " + std::to_string(gain) + " dB");
+
+        auto rv = ui::newFx("fdn"); rv.p.set("decay", 2.0); rv.p.set("mix", 1.0); rv.p.set("pre", 0.0); rv.p.set("mod", 0.0);
+        { auto e = us::makeEffect("fdn"); e->prepare(sr, 512); e->set(rv); std::vector<float> L(3 * 48000, 0.f), R(L.size(), 0.f); L[0] = R[0] = 1;
+          for (size_t o = 0; o < L.size(); o += 512) e->process(L.data() + o, R.data() + o, (int)std::min<size_t>(512, L.size() - o));
+          auto win = [&](double a, double b) { double s = 0; for (size_t i = (size_t)(a * sr); i < (size_t)(b * sr); i++) s += (double)L[i] * L[i] + (double)R[i] * R[i]; return 10 * std::log10(s + 1e-30); };
+          const double drop = win(0.3, 0.4) - win(1.3, 1.4);   // 2 s RT60 -> 30 dB per second
+          bool fin = true; for (float v : L) fin &= std::isfinite(v);
+          check(fin && drop > 22 && drop < 38, "Vault reverb: 2 s decay falls " + std::to_string(drop) + " dB in one second (30 expected)"); }
+        // every mode at its extremes stays finite and bounded on a loud chord
+        std::vector<float> loud((size_t)N); for (int i = 0; i < N; i++) loud[(size_t)i] = (float)(0.9 * (std::sin(2 * 3.14159265358979 * 110 * i / sr) * 0.5 + std::sin(2 * 3.14159265358979 * 3300 * i / sr) * 0.5));
+        float worst = 0; bool ok = true; std::string worstMode, peaks;
+        auto measure = [&](const us::FxSlot& f, const char* md) { float pk = 0; for (float v : runFx(f, loud)) { if (!std::isfinite(v)) ok = false; pk = std::max(pk, std::abs(v)); } if (pk > worst) { worst = pk; worstMode = md; } peaks += std::string(md) + " " + juce::String(pk, 2).toStdString() + ", "; };
+        for (const char* md : { "tube", "tape", "transformer", "clip", "exciter" }) { auto f = ui::newFx("sat"); f.p.set("mode", juce::String(md)); f.p.set("drive", 30.0); f.p.set("bias", 1.0); measure(f, md); }
+        for (const char* md : { "hall", "room", "plate", "gated" }) { auto f = ui::newFx("fdn"); f.p.set("mode", juce::String(md)); f.p.set("decay", 20.0); f.p.set("size", 2.0); f.p.set("damp", 20000.0); f.p.set("mod", 1.0); f.p.set("mix", 1.0); measure(f, md); }
+        check(ok && worst < 4, "saturator and Vault reverb modes at full settings stay finite and bounded (peaks: " + peaks + "input peak 0.9)");
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

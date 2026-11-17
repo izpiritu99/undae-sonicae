@@ -17,6 +17,21 @@ const std::vector<FxSpec>& fxSpecs() {
         { "crush", "Bitcrush", { { "bits", "Bits", 2, 16, 8, false, {} }, { "tone", "Tone", 400, 18000, 12000, true, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
         { "duck", "Peak controller", { { "src", "Triggered by", 0, 0, 0, false, { "@buses" } }, { "mode", "Duck", 0, 0, 0, false, { "full", "band" } }, { "depth", "Depth", 0, 36, 12, false, {} }, { "sens", "Sensitivity", 0.5, 12, 3, false, {} },
             { "decay", "Decay", 0.02, 1, 0.15, true, {} }, { "freq", "Band Hz", 30, 12000, 120, true, {} }, { "q", "Band width", 0.3, 8, 1, true, {} } } },
+        { "peq", "Parametric EQ", { { "hps", "Low cut", 0, 0, 0, false, { "off", "12 dB/oct", "24 dB/oct" } }, { "hpf", "Cut Hz", 20, 2000, 80, true, {} },
+            { "lsf", "Low Hz", 30, 1000, 120, true, {} }, { "lsg", "Low", -18, 18, 0, false, {} },
+            { "p1f", "Band 1 Hz", 40, 1200, 250, true, {} }, { "p1g", "Band 1", -18, 18, 0, false, {} }, { "p1q", "Width 1", 0.2, 10, 1, true, {} },
+            { "p2f", "Band 2 Hz", 200, 6000, 1200, true, {} }, { "p2g", "Band 2", -18, 18, 0, false, {} }, { "p2q", "Width 2", 0.2, 10, 1, true, {} },
+            { "p3f", "Band 3 Hz", 1000, 18000, 5000, true, {} }, { "p3g", "Band 3", -18, 18, 0, false, {} }, { "p3q", "Width 3", 0.2, 10, 1, true, {} },
+            { "hsf", "High Hz", 1000, 18000, 8000, true, {} }, { "hsg", "High", -18, 18, 0, false, {} },
+            { "lps", "High cut", 0, 0, 0, false, { "off", "12 dB/oct", "24 dB/oct" } }, { "lpf", "Cut Hz", 1000, 20000, 18000, true, {} }, { "out", "Output", -18, 18, 0, false, {} } } },
+        { "deess", "De-esser", { { "mode", "Turn down", 0, 0, 0, false, { "split", "wide" } }, { "listen", "Listen", 0, 0, 0, false, { "off", "on" } },
+            { "freq", "From Hz", 2000, 12000, 6000, true, {} }, { "thr", "Thresh", -60, 0, -30, false, {} }, { "range", "Range", 0, 24, 10, false, {} } } },
+        { "sat", "Saturator", { { "mode", "Character", 0, 0, 0, false, { "tube", "tape", "transformer", "clip", "exciter" } }, { "drive", "Drive", 0, 30, 6, false, {} },
+            { "bias", "Bias", 0, 1, 0.2, false, {} }, { "band", "Excite Hz", 1000, 12000, 3000, true, {} }, { "tone", "Tone", 1000, 20000, 14000, true, {} },
+            { "mix", "Mix", 0, 1, 1, false, {} }, { "out", "Output", -18, 6, 0, false, {} } } },
+        { "fdn", "Vault reverb", { { "mode", "Space", 0, 0, 0, false, { "hall", "room", "plate", "gated" } }, { "decay", "Decay", 0.2, 20, 2.5, true, {} },
+            { "size", "Size", 0.3, 2, 1, false, {} }, { "damp", "Damp Hz", 1000, 20000, 6000, true, {} }, { "pre", "Pre-delay", 0, 200, 15, false, {} },
+            { "mod", "Motion", 0, 1, 0.3, false, {} }, { "width", "Width", 0, 1, 1, false, {} }, { "mix", "Mix", 0, 1, 0.25, false, {} } } },
     };
     return v;
 }
