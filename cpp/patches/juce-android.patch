@@ -1,0 +1,73 @@
+diff --git a/modules/juce_gui_basics/menus/juce_PopupMenu.cpp b/modules/juce_gui_basics/menus/juce_PopupMenu.cpp
+index a213894..4085d3a 100644
+--- a/modules/juce_gui_basics/menus/juce_PopupMenu.cpp
++++ b/modules/juce_gui_basics/menus/juce_PopupMenu.cpp
+@@ -762,10 +762,17 @@ struct MenuWindow final : public Component, private AsyncUpdater
+     }
+ 
+     //==============================================================================
+-    void mouseDown  (const MouseEvent& e) override    { handleMouseEvent (e); }
++    // [undae-sonicae patch] a finger dragged up or down scrolls a long menu, and lifting it then picks nothing
++    void mouseDown  (const MouseEvent& e) override
++    {
++        if (e.source.isTouch()) { touchScrollY = e.getScreenY(); touchScrolling = false; mouseUpCanTrigger = true; }
++        handleMouseEvent (e);
++    }
+ 
+     void mouseUp (const MouseEvent& e) override
+     {
++        if (touchScrolling) { touchScrolling = false; mouseUpCanTrigger = false; return; }
++
+         SafePointer self { this };
+ 
+         handleMouseEvent (e);
+@@ -783,7 +790,23 @@ struct MenuWindow final : public Component, private AsyncUpdater
+     }
+ 
+     // Any move/drag after the menu is created will allow the mouse to trigger a highlighted item
+-    void mouseDrag  (const MouseEvent& e) override    { mouseUpCanTrigger |= true; handleMouseEvent (e); }
++    void mouseDrag  (const MouseEvent& e) override
++    {
++        if (e.source.isTouch() && canScroll())   // [undae-sonicae patch] see mouseDown
++        {
++            const auto dy = e.getScreenY() - touchScrollY;
++
++            if (touchScrolling || std::abs (dy) > 12)
++            {
++                if (! touchScrolling) setCurrentlyHighlightedChild (nullptr);
++                touchScrolling = true; mouseUpCanTrigger = false;
++                alterChildYPos (-dy); touchScrollY = e.getScreenY();
++                return;
++            }
++        }
++
++        mouseUpCanTrigger |= true; handleMouseEvent (e);
++    }
+     void mouseMove  (const MouseEvent& e) override    { mouseUpCanTrigger |= true; handleMouseEvent (e); }
+ 
+     void mouseWheelMove (const MouseEvent&, const MouseWheelDetails& wheel) override
+@@ -1439,6 +1462,7 @@ struct MenuWindow final : public Component, private AsyncUpdater
+     WeakReference<Component> componentAttachedTo;
+     Rectangle<int> windowPos;
+     bool needsToScroll = false;
++    int touchScrollY = 0; bool touchScrolling = false;   // [undae-sonicae patch] touch scrolling
+     bool hideOnExit = false, disableMouseMoves = false, hasAnyJuceCompHadFocus = false;
+     int numColumns = 0, contentHeight = 0, childYOffset = 0;
+     Component::SafePointer<ItemComponent> currentChild;
+diff --git a/modules/juce_opengl/opengl/juce_OpenGLTexture.cpp b/modules/juce_opengl/opengl/juce_OpenGLTexture.cpp
+index 19c73d6..cf8bddb 100644
+--- a/modules/juce_opengl/opengl/juce_OpenGLTexture.cpp
++++ b/modules/juce_opengl/opengl/juce_OpenGLTexture.cpp
+@@ -90,6 +90,12 @@ void OpenGLTexture::create (const int w, const int h, const void* pixels, GLenum
+     GLint detectedWidth{}, detectedHeight{};
+     glGetTexLevelParameteriv (GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &detectedWidth);
+     glGetTexLevelParameteriv (GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &detectedHeight);
++
++    if (detectedWidth <= 0 || detectedHeight <= 0)   // [undae-sonicae patch] the query needs GLES 3.1; on 3.0 it reports nothing,
++    {                                                // and there the first size tried (w, h) is the one allocated (3.0 has non-power-of-two textures)
++        while (glGetError() != GL_NO_ERROR) {}
++        detectedWidth = w; detectedHeight = h;
++    }
+     std::tie (width, height) = std::tie (detectedWidth, detectedHeight);
+ 
+     if (width < w || height < h)

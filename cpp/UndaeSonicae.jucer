@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<JUCERPROJECT id="UsNat1" name="UndaeSonicae" projectType="guiapp" useAppConfig="0"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="0.3.0"
+              companyName="Undae Sonicae" bundleIdentifier="app.undaesonicae.studio"
+              cppLanguageStandard="20" displaySplashScreen="0" defines="JUCE_APPLICATION_NAME_STRING=&quot;Undae Sonicae&quot;&#10;JUCE_APPLICATION_VERSION_STRING=&quot;0.3.0&quot;">
+  <MAINGROUP id="Main01" name="UndaeSonicae">
+    <GROUP id="Src001" name="src">
+      <FILE id="Touch1" name="Touch.h" compile="0" resource="0" file="src/app/Touch.h"/>
+      <FILE id="Keys01" name="Keys.h" compile="0" resource="0" file="src/app/Keys.h"/>
+      <FILE id="Cards1" name="Cards.h" compile="0" resource="0" file="src/app/Cards.h"/>
+      <FILE id="AtSh01" name="AtomicShared.h" compile="0" resource="0" file="src/engine/AtomicShared.h"/>
+      <FILE id="Wmark1" name="wordmark.png" compile="0" resource="1" file="../app/img/wordmark.png"/>
+      <FILE id="c2e976" name="AppMain.cpp" compile="1" resource="0" file="src/app/AppMain.cpp"/>
+      <FILE id="4b5a81" name="DesignView.h" compile="0" resource="0" file="src/app/DesignView.h"/>
+      <FILE id="3373b2" name="Doc.cpp" compile="1" resource="0" file="src/app/Doc.cpp"/>
+      <FILE id="5aff68" name="Doc.h" compile="0" resource="0" file="src/app/Doc.h"/>
+      <FILE id="c0f23d" name="Form.h" compile="0" resource="0" file="src/app/Form.h"/>
+      <FILE id="7bf17d" name="InstView.h" compile="0" resource="0" file="src/app/InstView.h"/>
+      <FILE id="dbf08c" name="LabView.h" compile="0" resource="0" file="src/app/LabView.h"/>
+      <FILE id="b192b0" name="LibView.h" compile="0" resource="0" file="src/app/LibView.h"/>
+      <FILE id="669f7f" name="MixerView.h" compile="0" resource="0" file="src/app/MixerView.h"/>
+      <FILE id="0cdad8" name="PlugUI.h" compile="0" resource="0" file="src/app/PlugUI.h"/>
+      <FILE id="e7d34e" name="Presets.h" compile="0" resource="0" file="src/app/Presets.h"/>
+      <FILE id="17e9bb" name="RackView.h" compile="0" resource="0" file="src/app/RackView.h"/>
+      <FILE id="6920cc" name="RollView.h" compile="0" resource="0" file="src/app/RollView.h"/>
+      <FILE id="57671c" name="SettingsView.h" compile="0" resource="0" file="src/app/SettingsView.h"/>
+      <FILE id="5f5fbf" name="SongView.h" compile="0" resource="0" file="src/app/SongView.h"/>
+      <FILE id="2b663d" name="Theme.h" compile="0" resource="0" file="src/app/Theme.h"/>
+      <FILE id="e23a87" name="Analysis.cpp" compile="1" resource="0" file="src/engine/Analysis.cpp"/>
+      <FILE id="1606d6" name="Analysis.h" compile="0" resource="0" file="src/engine/Analysis.h"/>
+      <FILE id="119ef5" name="Dsp.cpp" compile="1" resource="0" file="src/engine/Dsp.cpp"/>
+      <FILE id="aa19aa" name="Dsp.h" compile="0" resource="0" file="src/engine/Dsp.h"/>
+      <FILE id="941155" name="Effects.cpp" compile="1" resource="0" file="src/engine/Effects.cpp"/>
+      <FILE id="aa61b3" name="Effects.h" compile="0" resource="0" file="src/engine/Effects.h"/>
+      <FILE id="89313a" name="Engine.cpp" compile="1" resource="0" file="src/engine/Engine.cpp"/>
+      <FILE id="486b42" name="Engine.h" compile="0" resource="0" file="src/engine/Engine.h"/>
+      <FILE id="0b9290" name="Mp3.cpp" compile="1" resource="0" file="src/engine/Mp3.cpp"/>
+      <FILE id="ad7600" name="Mp3.h" compile="0" resource="0" file="src/engine/Mp3.h"/>
+      <FILE id="8d196c" name="PluginHost.cpp" compile="1" resource="0" file="src/engine/PluginHost.cpp"/>
+      <FILE id="7f9de8" name="PluginHost.h" compile="0" resource="0" file="src/engine/PluginHost.h"/>
+      <FILE id="0b12e8" name="Project.cpp" compile="1" resource="0" file="src/engine/Project.cpp"/>
+      <FILE id="60bb1c" name="Project.h" compile="0" resource="0" file="src/engine/Project.h"/>
+      <FILE id="ba7e0b" name="Samples.cpp" compile="1" resource="0" file="src/engine/Samples.cpp"/>
+      <FILE id="2e41ee" name="Samples.h" compile="0" resource="0" file="src/engine/Samples.h"/>
+      <FILE id="d25a1c" name="SoundDesign.cpp" compile="1" resource="0" file="src/engine/SoundDesign.cpp"/>
+      <FILE id="b41138" name="SoundDesign.h" compile="0" resource="0" file="src/engine/SoundDesign.h"/>
+      <FILE id="8d95d1" name="Voices.cpp" compile="1" resource="0" file="src/engine/Voices.cpp"/>
+      <FILE id="b57b27" name="Voices.h" compile="0" resource="0" file="src/engine/Voices.h"/>
+    </GROUP>
+  </MAINGROUP>
+  <JUCEOPTIONS JUCE_USE_CURL="0" JUCE_WEB_BROWSER="0" JUCE_USE_MP3AUDIOFORMAT="1"
+               JUCE_USE_FLAC="1" JUCE_USE_OGGVORBIS="1" JUCE_STRICT_REFCOUNTEDPOINTER="1"/>
+  <EXPORTFORMATS>
+    <ANDROIDSTUDIO targetFolder="Builds/Android" androidMinimumSDK="26" androidTargetSDK="36"
+                   androidCompileSDK="36" gradleVersion="9.1.0" androidPluginVersion="8.13.0"
+                   androidVersionCode="4" microphonePermissionNeeded="1" androidInternetNeeded="1"
+                   androidScreenOrientation="unspecified" androidTheme="@android:style/Theme.NoTitleBar.Fullscreen"
+                   cppLanguageStandard="20" androidExtraAssetsFolder="" androidJavaLibs=""
+                   androidBluetoothScanNeeded="0" androidBluetoothAdvertiseNeeded="0"
+                   androidBluetoothConnectNeeded="0">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug" headerPath="../../src&#10;../../src/app"
+                       androidArchitectures="arm64-v8a x86_64"/>
+        <CONFIGURATION isDebug="0" name="Release" headerPath="../../src&#10;../../src/app"
+                       androidArchitectures="arm64-v8a x86_64" optimisation="3"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_core" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_dsp" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_opengl" path="third_party/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="third_party/JUCE/modules"/>
+      </MODULEPATHS>
+    </ANDROIDSTUDIO>
+  </EXPORTFORMATS>
+  <MODULES>
+    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="0"/>
+    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_opengl" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  </MODULES>
+</JUCERPROJECT>

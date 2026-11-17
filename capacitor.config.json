@@ -1,0 +1,12 @@
+{
+  "appId": "app.undaesonicae.daw",
+  "appName": "Undae Sonicae",
+  "webDir": "app",
+  "android": {
+    "backgroundColor": "#15131a",
+    "allowMixedContent": true
+  },
+  "server": {
+    "cleartext": true
+  }
+}

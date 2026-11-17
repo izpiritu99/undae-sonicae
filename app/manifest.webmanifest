@@ -1,0 +1,16 @@
+{
+  "name": "Undae Sonicae",
+  "short_name": "Undae Sonicae",
+  "description": "Pattern-based DAW with audio-to-MIDI, key detection, synth, sampler and mixer.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#16181c",
+  "theme_color": "#1e2126",
+  "categories": ["music", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

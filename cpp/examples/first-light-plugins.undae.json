@@ -1,0 +1,1253 @@
+{
+ "app": "undae-sonicae",
+ "project": {
+  "v": 1,
+  "name": "First Light (plug-ins)",
+  "bpm": 92,
+  "swing": 0.18,
+  "key": {
+   "root": 9,
+   "scale": "minor"
+  },
+  "channels": [
+   {
+    "id": "vh3kfmcv",
+    "name": "Kick",
+    "type": "sample",
+    "color": "#ff7a59",
+    "vol": 0.8,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "bus": "sr5nnf10",
+    "root": 60,
+    "sample": "808:kick",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.08,
+    "gate": false,
+    "rev": false,
+    "cut": false,
+    "choke": 0,
+    "synth": null
+   },
+   {
+    "id": "e8svg4z3",
+    "name": "Snare",
+    "type": "sample",
+    "color": "#ffb84d",
+    "vol": 0.8,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "bus": "sr5nnf10",
+    "root": 60,
+    "sample": "808:snare",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.08,
+    "gate": false,
+    "rev": false,
+    "cut": false,
+    "choke": 0,
+    "synth": null
+   },
+   {
+    "id": "ggtnwr39",
+    "name": "Clap",
+    "type": "sample",
+    "color": "#e6d15a",
+    "vol": 0.8,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "bus": "sr5nnf10",
+    "root": 60,
+    "sample": "808:clap",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.08,
+    "gate": false,
+    "rev": false,
+    "cut": false,
+    "choke": 0,
+    "synth": null
+   },
+   {
+    "id": "11c1shfb",
+    "name": "Hat",
+    "type": "sample",
+    "color": "#7bd88f",
+    "vol": 0.6,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "bus": "sr5nnf10",
+    "root": 60,
+    "sample": "808:hat",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.08,
+    "gate": false,
+    "rev": false,
+    "cut": false,
+    "choke": 1,
+    "synth": null
+   },
+   {
+    "id": "5jw3njjl",
+    "name": "Open Hat",
+    "type": "sample",
+    "color": "#45d0c4",
+    "vol": 0.55,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "bus": "sr5nnf10",
+    "root": 60,
+    "sample": "808:ohat",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.08,
+    "gate": false,
+    "rev": false,
+    "cut": false,
+    "choke": 1,
+    "synth": null
+   },
+   {
+    "id": "sd94s0aw",
+    "name": "Keys",
+    "type": "sample",
+    "color": "#5aa9ff",
+    "vol": 0.8,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "bus": "obj6g7nv",
+    "root": 60,
+    "sample": "inst:keys",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.3,
+    "gate": true,
+    "rev": false,
+    "cut": false,
+    "choke": 0,
+    "synth": null
+   },
+   {
+    "id": "7gqxlwo1",
+    "name": "Bass",
+    "type": "synth",
+    "color": "#9d8cff",
+    "vol": 0.8,
+    "pan": 0,
+    "mute": true,
+    "solo": false,
+    "bus": "jws0iq9g",
+    "root": 60,
+    "sample": "inst:keys",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.08,
+    "gate": false,
+    "rev": false,
+    "cut": false,
+    "choke": 0,
+    "synth": {
+     "osc": [
+      {
+       "on": true,
+       "wave": "sawtooth",
+       "oct": 0,
+       "semi": 0,
+       "fine": 0,
+       "level": 0.8,
+       "wave2": "square",
+       "morph": 0,
+       "pan": 0
+      },
+      {
+       "on": false,
+       "wave": "square",
+       "oct": 0,
+       "semi": 0,
+       "fine": 7,
+       "level": 0.5,
+       "wave2": "sine",
+       "morph": 0,
+       "pan": 0
+      },
+      {
+       "on": false,
+       "wave": "sine",
+       "oct": -1,
+       "semi": 0,
+       "fine": 0,
+       "level": 0.5,
+       "wave2": "triangle",
+       "morph": 0,
+       "pan": 0
+      }
+     ],
+     "uni": 1,
+     "detune": 14,
+     "spread": 0.5,
+     "drift": 0,
+     "sub": 0.7,
+     "subWave": "sine",
+     "subOct": -1,
+     "noise": 0,
+     "noiseTone": 1,
+     "fm": 0,
+     "ring": 0,
+     "filter": {
+      "on": true,
+      "type": "lowpass",
+      "cutoff": 420,
+      "q": 2,
+      "env": 26,
+      "key": 0,
+      "drive": 0
+     },
+     "filter2": {
+      "on": false,
+      "type": "highpass",
+      "cutoff": 200,
+      "q": 1,
+      "env": 0,
+      "key": 0
+     },
+     "froute": "serial",
+     "shaper": {
+      "type": "off",
+      "amt": 0.3
+     },
+     "aenv": {
+      "a": 0.004,
+      "d": 0.3,
+      "s": 0.75,
+      "r": 0.12
+     },
+     "fenv": {
+      "a": 0.003,
+      "d": 0.22,
+      "s": 0.15,
+      "r": 0.15
+     },
+     "menv": {
+      "a": 0.01,
+      "d": 0.4,
+      "s": 0,
+      "r": 0.3
+     },
+     "menv2": {
+      "a": 0.3,
+      "d": 1,
+      "s": 0.5,
+      "r": 0.5
+     },
+     "lfo": [
+      {
+       "wave": "sine",
+       "rate": 5,
+       "sync": 0,
+       "fade": 0
+      },
+      {
+       "wave": "triangle",
+       "rate": 0.4,
+       "sync": 0,
+       "fade": 0
+      },
+      {
+       "wave": "sh",
+       "rate": 8,
+       "sync": 0,
+       "fade": 0
+      }
+     ],
+     "mod": [
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      }
+     ],
+     "macro": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "mode": "mono",
+     "glide": 0.04,
+     "voices": 8,
+     "vel": 0.6,
+     "gain": 0.7,
+     "bendRange": 2
+    }
+   },
+   {
+    "id": "11qoyq28",
+    "name": "Lead",
+    "type": "synth",
+    "color": "#f277c6",
+    "vol": 0.6,
+    "pan": 0,
+    "mute": true,
+    "solo": false,
+    "bus": "vycs9b6a",
+    "root": 60,
+    "sample": "inst:keys",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.08,
+    "gate": false,
+    "rev": false,
+    "cut": false,
+    "choke": 0,
+    "synth": {
+     "osc": [
+      {
+       "on": true,
+       "wave": "square",
+       "oct": 0,
+       "semi": 0,
+       "fine": 0,
+       "level": 0.8,
+       "wave2": "square",
+       "morph": 0,
+       "pan": 0
+      },
+      {
+       "on": true,
+       "wave": "sawtooth",
+       "oct": 0,
+       "semi": 0,
+       "fine": 9,
+       "level": 0.45,
+       "wave2": "sine",
+       "morph": 0,
+       "pan": 0
+      },
+      {
+       "on": false,
+       "wave": "sine",
+       "oct": -1,
+       "semi": 0,
+       "fine": 0,
+       "level": 0.5,
+       "wave2": "triangle",
+       "morph": 0,
+       "pan": 0
+      }
+     ],
+     "uni": 1,
+     "detune": 14,
+     "spread": 0.5,
+     "drift": 0,
+     "sub": 0,
+     "subWave": "sine",
+     "subOct": -1,
+     "noise": 0,
+     "noiseTone": 1,
+     "fm": 0,
+     "ring": 0,
+     "filter": {
+      "on": true,
+      "type": "lowpass",
+      "cutoff": 2600,
+      "q": 3,
+      "env": 10,
+      "key": 0.4,
+      "drive": 0
+     },
+     "filter2": {
+      "on": false,
+      "type": "highpass",
+      "cutoff": 200,
+      "q": 1,
+      "env": 0,
+      "key": 0
+     },
+     "froute": "serial",
+     "shaper": {
+      "type": "off",
+      "amt": 0.3
+     },
+     "aenv": {
+      "a": 0.012,
+      "d": 0.25,
+      "s": 0.7,
+      "r": 0.3
+     },
+     "fenv": {
+      "a": 0.005,
+      "d": 0.3,
+      "s": 0.2,
+      "r": 0.3
+     },
+     "menv": {
+      "a": 0.01,
+      "d": 0.4,
+      "s": 0,
+      "r": 0.3
+     },
+     "menv2": {
+      "a": 0.3,
+      "d": 1,
+      "s": 0.5,
+      "r": 0.5
+     },
+     "lfo": [
+      {
+       "wave": "sine",
+       "rate": 5.5,
+       "sync": 0,
+       "fade": 0
+      },
+      {
+       "wave": "triangle",
+       "rate": 0.4,
+       "sync": 0,
+       "fade": 0
+      },
+      {
+       "wave": "sh",
+       "rate": 8,
+       "sync": 0,
+       "fade": 0
+      }
+     ],
+     "mod": [
+      {
+       "src": "lfo1",
+       "dst": "pitch",
+       "amt": 0.008
+      },
+      {
+       "src": "wheel",
+       "dst": "cutoff",
+       "amt": 0.5
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      },
+      {
+       "src": "none",
+       "dst": "none",
+       "amt": 0
+      }
+     ],
+     "macro": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "mode": "poly",
+     "glide": 0,
+     "voices": 8,
+     "vel": 0.6,
+     "gain": 0.7,
+     "bendRange": 2
+    }
+   },
+   {
+    "id": "qpcz415l",
+    "name": "Surge XT",
+    "type": "plugin",
+    "color": "#f277c6",
+    "vol": 0.6,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "bus": "vycs9b6a",
+    "root": 60,
+    "sample": "inst:keys",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.08,
+    "gate": false,
+    "rev": false,
+    "cut": false,
+    "choke": 0,
+    "synth": null,
+    "plug": {
+     "path": "/home/izpiritu/.vst3/Surge XT.vst3",
+     "pid": "ABCDEF019182FAEB566D624153675854",
+     "name": "Surge XT",
+     "fmt": "vst3",
+     "inst": true
+    }
+   },
+   {
+    "id": "2y0c9j1g",
+    "name": "FB-3300",
+    "type": "plugin",
+    "color": "#9d8cff",
+    "vol": 0.8,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "bus": "jws0iq9g",
+    "root": 60,
+    "sample": "inst:keys",
+    "tune": 0,
+    "fine": 0,
+    "start": 0,
+    "att": 0,
+    "rel": 0.08,
+    "gate": false,
+    "rev": false,
+    "cut": false,
+    "choke": 0,
+    "synth": null,
+    "plug": {
+     "path": "/home/izpiritu/.vst-win/fb330064.dll",
+     "pid": "66623333",
+     "name": "FB-3300",
+     "fmt": "vst2",
+     "windows": true,
+     "inst": true
+    }
+   }
+  ],
+  "patterns": [
+   {
+    "id": "ol8u3zp6",
+    "name": "Beat",
+    "bars": 1,
+    "notes": {
+     "vh3kfmcv": [
+      {
+       "id": "8i4d6e0s",
+       "t": 0,
+       "d": 24,
+       "n": 60,
+       "v": 0.8
+      },
+      {
+       "id": "gxgcujd4",
+       "t": 168,
+       "d": 24,
+       "n": 60,
+       "v": 0.8
+      },
+      {
+       "id": "iqpfdze3",
+       "t": 240,
+       "d": 24,
+       "n": 60,
+       "v": 0.8
+      }
+     ],
+     "e8svg4z3": [
+      {
+       "id": "6c7cj9hv",
+       "t": 96,
+       "d": 24,
+       "n": 60,
+       "v": 0.8
+      },
+      {
+       "id": "2i6lro6z",
+       "t": 288,
+       "d": 24,
+       "n": 60,
+       "v": 0.8
+      }
+     ],
+     "ggtnwr39": [
+      {
+       "id": "jqcvhk9w",
+       "t": 288,
+       "d": 24,
+       "n": 60,
+       "v": 0.5
+      }
+     ],
+     "11c1shfb": [
+      {
+       "id": "6z92lh9t",
+       "t": 0,
+       "d": 24,
+       "n": 60,
+       "v": 0.8
+      },
+      {
+       "id": "u0xmpp3h",
+       "t": 96,
+       "d": 24,
+       "n": 60,
+       "v": 0.8
+      },
+      {
+       "id": "5i4mk8xo",
+       "t": 192,
+       "d": 24,
+       "n": 60,
+       "v": 0.8
+      },
+      {
+       "id": "g5qf8jk9",
+       "t": 288,
+       "d": 24,
+       "n": 60,
+       "v": 0.8
+      },
+      {
+       "id": "2e8xq3w7",
+       "t": 48,
+       "d": 24,
+       "n": 60,
+       "v": 0.5
+      },
+      {
+       "id": "a3rpk6ui",
+       "t": 144,
+       "d": 24,
+       "n": 60,
+       "v": 0.5
+      },
+      {
+       "id": "wx85fcv8",
+       "t": 240,
+       "d": 24,
+       "n": 60,
+       "v": 0.5
+      }
+     ],
+     "5jw3njjl": [
+      {
+       "id": "jmefso6d",
+       "t": 336,
+       "d": 24,
+       "n": 60,
+       "v": 0.7
+      }
+     ]
+    }
+   },
+   {
+    "id": "bapx3xvh",
+    "name": "Chords",
+    "bars": 2,
+    "notes": {
+     "sd94s0aw": [
+      {
+       "id": "7a0q9lrg",
+       "t": 0,
+       "d": 360,
+       "n": 57,
+       "v": 0.7
+      },
+      {
+       "id": "oo1gox8w",
+       "t": 0,
+       "d": 360,
+       "n": 60,
+       "v": 0.7
+      },
+      {
+       "id": "2zkejgzz",
+       "t": 0,
+       "d": 360,
+       "n": 64,
+       "v": 0.7
+      },
+      {
+       "id": "pdldfq83",
+       "t": 0,
+       "d": 360,
+       "n": 67,
+       "v": 0.7
+      },
+      {
+       "id": "3h14zy1u",
+       "t": 384,
+       "d": 360,
+       "n": 53,
+       "v": 0.7
+      },
+      {
+       "id": "7ci7loa7",
+       "t": 384,
+       "d": 360,
+       "n": 57,
+       "v": 0.7
+      },
+      {
+       "id": "j1rrjn70",
+       "t": 384,
+       "d": 360,
+       "n": 60,
+       "v": 0.7
+      },
+      {
+       "id": "aipzl07q",
+       "t": 384,
+       "d": 360,
+       "n": 64,
+       "v": 0.7
+      }
+     ]
+    }
+   },
+   {
+    "id": "0g8p508o",
+    "name": "Bass",
+    "bars": 2,
+    "notes": {
+     "7gqxlwo1": [
+      {
+       "id": "5zjp1vap",
+       "t": 0,
+       "d": 72,
+       "n": 45,
+       "v": 0.9
+      },
+      {
+       "id": "ybwqvoqy",
+       "t": 72,
+       "d": 48,
+       "n": 45,
+       "v": 0.7
+      },
+      {
+       "id": "qfyfs1rw",
+       "t": 144,
+       "d": 48,
+       "n": 45,
+       "v": 0.7
+      },
+      {
+       "id": "c01ocvok",
+       "t": 240,
+       "d": 96,
+       "n": 45,
+       "v": 0.8
+      },
+      {
+       "id": "431diqz9",
+       "t": 384,
+       "d": 72,
+       "n": 41,
+       "v": 0.9
+      },
+      {
+       "id": "eghm1t53",
+       "t": 456,
+       "d": 48,
+       "n": 41,
+       "v": 0.7
+      },
+      {
+       "id": "oi3qyp1t",
+       "t": 528,
+       "d": 48,
+       "n": 41,
+       "v": 0.7
+      },
+      {
+       "id": "1z4j4e7n",
+       "t": 624,
+       "d": 72,
+       "n": 41,
+       "v": 0.8
+      },
+      {
+       "id": "8i1hgyrm",
+       "t": 720,
+       "d": 48,
+       "n": 43,
+       "v": 0.8
+      }
+     ],
+     "2y0c9j1g": [
+      {
+       "id": "n6t80lhl",
+       "t": 0,
+       "d": 72,
+       "n": 45,
+       "v": 0.9
+      },
+      {
+       "id": "8ic8ncz6",
+       "t": 72,
+       "d": 48,
+       "n": 45,
+       "v": 0.7
+      },
+      {
+       "id": "ah5fa4g9",
+       "t": 144,
+       "d": 48,
+       "n": 45,
+       "v": 0.7
+      },
+      {
+       "id": "r2nioqcq",
+       "t": 240,
+       "d": 96,
+       "n": 45,
+       "v": 0.8
+      },
+      {
+       "id": "tewpj7iq",
+       "t": 384,
+       "d": 72,
+       "n": 41,
+       "v": 0.9
+      },
+      {
+       "id": "mzozajfr",
+       "t": 456,
+       "d": 48,
+       "n": 41,
+       "v": 0.7
+      },
+      {
+       "id": "fmlps29u",
+       "t": 528,
+       "d": 48,
+       "n": 41,
+       "v": 0.7
+      },
+      {
+       "id": "z8vucz3l",
+       "t": 624,
+       "d": 72,
+       "n": 41,
+       "v": 0.8
+      },
+      {
+       "id": "0gr40854",
+       "t": 720,
+       "d": 48,
+       "n": 43,
+       "v": 0.8
+      }
+     ]
+    }
+   },
+   {
+    "id": "oxbg7mxn",
+    "name": "Lead",
+    "bars": 2,
+    "notes": {
+     "11qoyq28": [
+      {
+       "id": "24x1oiny",
+       "t": 0,
+       "d": 120,
+       "n": 76,
+       "v": 0.8
+      },
+      {
+       "id": "eebw4hld",
+       "t": 144,
+       "d": 48,
+       "n": 74,
+       "v": 0.7
+      },
+      {
+       "id": "l2t2d8ju",
+       "t": 192,
+       "d": 144,
+       "n": 72,
+       "v": 0.8
+      },
+      {
+       "id": "5qlhrd2r",
+       "t": 432,
+       "d": 96,
+       "n": 69,
+       "v": 0.7
+      },
+      {
+       "id": "81j7q0vj",
+       "t": 576,
+       "d": 96,
+       "n": 72,
+       "v": 0.8
+      },
+      {
+       "id": "gjfynktj",
+       "t": 672,
+       "d": 96,
+       "n": 76,
+       "v": 0.8
+      }
+     ],
+     "qpcz415l": [
+      {
+       "id": "zktb2g3v",
+       "t": 0,
+       "d": 120,
+       "n": 76,
+       "v": 0.8
+      },
+      {
+       "id": "hswya5xm",
+       "t": 144,
+       "d": 48,
+       "n": 74,
+       "v": 0.7
+      },
+      {
+       "id": "ln52rrya",
+       "t": 192,
+       "d": 144,
+       "n": 72,
+       "v": 0.8
+      },
+      {
+       "id": "2fysi8fe",
+       "t": 432,
+       "d": 96,
+       "n": 69,
+       "v": 0.7
+      },
+      {
+       "id": "zudgmo3g",
+       "t": 576,
+       "d": 96,
+       "n": 72,
+       "v": 0.8
+      },
+      {
+       "id": "xxyggptt",
+       "t": 672,
+       "d": 96,
+       "n": 76,
+       "v": 0.8
+      }
+     ]
+    }
+   }
+  ],
+  "swingDiv": 16,
+  "sig": {
+   "n": 4,
+   "d": 4
+  },
+  "song": {
+   "tracks": 6,
+   "clips": [
+    {
+     "id": "b0t4mnnj",
+     "pat": "ol8u3zp6",
+     "track": 0,
+     "start": 0,
+     "len": 8
+    },
+    {
+     "id": "xpxq7mid",
+     "pat": "bapx3xvh",
+     "track": 1,
+     "start": 0,
+     "len": 8
+    },
+    {
+     "id": "4xdtl7lu",
+     "pat": "0g8p508o",
+     "track": 2,
+     "start": 2,
+     "len": 6
+    },
+    {
+     "id": "qxpz5qwg",
+     "pat": "oxbg7mxn",
+     "track": 3,
+     "start": 4,
+     "len": 4
+    }
+   ],
+   "audio": [],
+   "auto": []
+  },
+  "buses": [
+   {
+    "id": "master",
+    "name": "Master",
+    "kind": "master",
+    "vol": 0.9,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "mono": false,
+    "width": 1,
+    "inv": false,
+    "sends": [],
+    "toMaster": true,
+    "fx": [
+     {
+      "id": "b8vbm676",
+      "type": "limiter",
+      "on": true,
+      "p": {
+       "in": 0,
+       "ceil": -1,
+       "rel": 0.08
+      }
+     }
+    ],
+    "input": "",
+    "arm": false,
+    "mon": false,
+    "stereo": false
+   },
+   {
+    "id": "sr5nnf10",
+    "name": "Drums",
+    "kind": "insert",
+    "vol": 1,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "mono": false,
+    "width": 1,
+    "inv": false,
+    "sends": [],
+    "toMaster": true,
+    "fx": [
+     {
+      "id": "imocr28a",
+      "type": "plugin",
+      "on": true,
+      "p": {
+       "path": "/home/izpiritu/.vst-win/TAL-Bitcrusher.dll",
+       "pid": "36353133",
+       "name": "TAL BitCrusher - TAL",
+       "fmt": "vst2",
+       "windows": true
+      }
+     }
+    ],
+    "input": "",
+    "arm": false,
+    "mon": false,
+    "stereo": false
+   },
+   {
+    "id": "obj6g7nv",
+    "name": "Keys",
+    "kind": "insert",
+    "vol": 1,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "mono": false,
+    "width": 1,
+    "inv": false,
+    "sends": [
+     {
+      "to": "2rulv5bg",
+      "amt": 0.25
+     }
+    ],
+    "toMaster": true,
+    "fx": [],
+    "input": "",
+    "arm": false,
+    "mon": false,
+    "stereo": false
+   },
+   {
+    "id": "jws0iq9g",
+    "name": "Bass",
+    "kind": "insert",
+    "vol": 1,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "mono": false,
+    "width": 1,
+    "inv": false,
+    "sends": [],
+    "toMaster": true,
+    "fx": [],
+    "input": "",
+    "arm": false,
+    "mon": false,
+    "stereo": false
+   },
+   {
+    "id": "vycs9b6a",
+    "name": "Lead",
+    "kind": "insert",
+    "vol": 1,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "mono": false,
+    "width": 1,
+    "inv": false,
+    "sends": [
+     {
+      "to": "2rulv5bg",
+      "amt": 0.2
+     },
+     {
+      "to": "vj9m9gir",
+      "amt": 0.25
+     }
+    ],
+    "toMaster": true,
+    "fx": [],
+    "input": "",
+    "arm": false,
+    "mon": false,
+    "stereo": false
+   },
+   {
+    "id": "2rulv5bg",
+    "name": "Send A",
+    "kind": "send",
+    "vol": 1,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "mono": false,
+    "width": 1,
+    "inv": false,
+    "sends": [],
+    "toMaster": true,
+    "fx": [
+     {
+      "id": "hpvn7vpy",
+      "type": "reverb",
+      "on": true,
+      "p": {
+       "size": 2.2,
+       "damp": 0.5,
+       "pre": 10,
+       "mix": 1
+      }
+     }
+    ],
+    "input": "",
+    "arm": false,
+    "mon": false,
+    "stereo": false
+   },
+   {
+    "id": "vj9m9gir",
+    "name": "Send B",
+    "kind": "send",
+    "vol": 1,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "mono": false,
+    "width": 1,
+    "inv": false,
+    "sends": [],
+    "toMaster": true,
+    "fx": [
+     {
+      "id": "zsq2h9lo",
+      "type": "delay",
+      "on": true,
+      "p": {
+       "time": 375,
+       "fb": 0.4,
+       "tone": 5000,
+       "mix": 1
+      }
+     }
+    ],
+    "input": "",
+    "arm": false,
+    "mon": false,
+    "stereo": false
+   }
+  ],
+  "arrs": [
+   {
+    "id": "ziuayjjc",
+    "name": "Arrangement"
+   }
+  ],
+  "arrCur": "ziuayjjc"
+ },
+ "samples": []
+}

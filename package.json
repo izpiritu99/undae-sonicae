@@ -1,0 +1,69 @@
+{
+  "name": "undae-sonicae",
+  "version": "0.1.0",
+  "description": "Pattern-based DAW with audio-to-MIDI, key detection, modular synth, sampler and mixer",
+  "author": {
+    "name": "Undae Sonicae",
+    "email": "dev@undae-sonicae.invalid"
+  },
+  "homepage": "https://undae-sonicae.invalid",
+  "license": "MIT",
+  "private": true,
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "desktop": "electron .",
+    "dist:linux": "sh native/build.sh && electron-builder --linux AppImage deb && sh tools/appimage-runtime.sh",
+    "android:init": "cap add android && node tools/android-patch.js && cap sync android",
+    "android:sync": "cap sync android",
+    "android:apk": "cap sync android && cd android && gradlew assembleDebug",
+    "build:host": "sh native/build.sh",
+    "test:host": "node native/test-host.mjs",
+    "test:vsthost": "node native/test-vsthost.mjs"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "app.undaesonicae.daw",
+    "productName": "Undae Sonicae",
+    "files": [
+      "app/**",
+      "desktop/**",
+      "tools/serve.js",
+      "tools/host.js",
+      "tools/share.js"
+    ],
+    "linux": {
+      "category": "AudioVideo",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "app/icons/icon-512.png",
+      "synopsis": "Pattern-based DAW with audio-to-MIDI"
+    },
+    "extraResources": [
+      {
+        "from": "native/bin/undae-host",
+        "to": "undae-host"
+      },
+      {
+        "from": "native/bin/undae-test.clap",
+        "to": "undae-test.clap"
+      },
+      {
+        "from": "native/bin/undae-vsthost.exe",
+        "to": "undae-vsthost.exe"
+      },
+      {
+        "from": "native/bin/undae-vsthost32.exe",
+        "to": "undae-vsthost32.exe"
+      }
+    ]
+  }
+}

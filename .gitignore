@@ -1,0 +1,21 @@
+# Build output and installed packages
+/node_modules/
+/dist/
+/builds/
+/cpp/build/
+/cpp/build-*/
+/cpp/*.log
+/cpp/Builds/Android/build/
+/cpp/Builds/Android/app/build/
+/cpp/Builds/Android/app/.cxx/
+/cpp/Builds/Android/.gradle/
+/cpp/Builds/Android/local.properties
+
+# JUCE 8.0.15 is its own shallow clone, with cpp/patches/juce-android.patch applied (see cpp/README.md)
+/cpp/third_party/JUCE/
+
+# Windows and editors
+.vs/
+*.user
+Thumbs.db
+.DS_Store
