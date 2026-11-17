@@ -595,11 +595,16 @@ example `C:\dev\undae-sonicae`) and work there: building on a FAT32 stick is slo
 
 - The folder is a git repository (branch `main`). Build output, `node_modules`, the packages in `dist/` and `builds/`,
   and JUCE are not tracked (see `.gitignore`). Line endings are LF (`.gitattributes`); MSVC is fine with that.
-- JUCE 8.0.15 is in `cpp/third_party/JUCE`: a shallow clone of the release tag with the two local changes applied
-  (`git -C cpp/third_party/JUCE status` lists `juce_PopupMenu.cpp` and `juce_OpenGLTexture.cpp` as modified). If it is
-  missing: `git clone --depth 1 --branch 8.0.15 https://github.com/juce-framework/JUCE cpp/third_party/JUCE`, then
+- JUCE 8.0.15 comes separately as `JUCE-8.0.15-patched.zip` at the top of the stick. It is one file because copying its
+  4,450 files to the stick one by one was very slow. Extract it into `cpp\third_party\` so that
+  `cpp\third_party\JUCE\CMakeLists.txt` exists, with Explorer's "Extract All" or
+  `tar -xf E:\JUCE-8.0.15-patched.zip -C cpp\third_party`.
+- The zip holds a shallow clone of the release tag with the two local changes applied: `git -C cpp/third_party/JUCE
+  status` lists `juce_PopupMenu.cpp` and `juce_OpenGLTexture.cpp` as modified. Without the zip, run
+  `git clone --depth 1 --branch 8.0.15 https://github.com/juce-framework/JUCE cpp/third_party/JUCE`, then
   `git -C cpp/third_party/JUCE apply ../../patches/juce-android.patch`.
-- FAT32 kept no executable bits, so both repositories on the stick have `core.fileMode false`.
+- FAT32 kept no executable bits, so the project's copy on the stick and JUCE's clone in the zip both have
+  `core.fileMode false`.
 
 ### Tools
 
