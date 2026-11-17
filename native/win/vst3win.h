@@ -48,9 +48,12 @@ static int is_dir(const char *unix_path) { char *d = dos_path(unix_path); FIND_D
 // The DLL inside a .vst3: the path itself (a single file), or Contents/<arch>-win/<name>.vst3 inside a bundle folder.
 static char *v3_binary(const char *unix_path) {
   if (!is_dir(unix_path)) return strdup(unix_path);
-  const char *base = strrchr(unix_path, '/'); base = base ? base + 1 : unix_path;
+  const char *base = base_name(unix_path);
   size_t n = strlen(unix_path) + strlen(base) + 40; char *p = malloc(n);
-  _snprintf(p, n, "%s/Contents/%s/%s", unix_path, HOST_BITS == 64 ? "x86_64-win" : "x86-win", base); p[n - 1] = 0; return p;
+  _snprintf(p, n, "%s/Contents/%s/%s", unix_path, HOST_BITS == 64 ? "x86_64-win" : "x86-win", base); p[n - 1] = 0;
+  { char *d = dos_path(p); FIND_DATA *f = malloc(sizeof *f); HANDLE h = FindFirstFileA(d, f); free(f); free(d);
+    if (h != (HANDLE)(intptr_t)-1) { FindClose(h); return p; } }
+  _snprintf(p, n, "%s/%s", unix_path, base); p[n - 1] = 0; return p;   // an old flat bundle: the DLL right inside the folder
 }
 static void *v3_module(const char *binary, void **lib) {                 // load the DLL and return its factory
   char *d = dos_path(binary); int bits = pe_bits(d); void *h = bits == HOST_BITS ? LoadLibraryA(d) : NULL; free(d); if (!h) return NULL;

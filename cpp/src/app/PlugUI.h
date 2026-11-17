@@ -42,7 +42,11 @@ inline void choosePlugin(juce::Component* at, bool instruments, std::function<vo
         group("VST3 (Linux)", [](auto& p) { return p.getProperty("format", "") == "vst3" && !(bool)p.getProperty("windows", false); });
         group("Windows VST (through Wine)", [](auto& p) { return (bool)p.getProperty("windows", false) && (int)p.getProperty("bits", 64) != 32; });
         group("Windows VST, 32-bit (through Wine)", [](auto& p) { return (bool)p.getProperty("windows", false) && (int)p.getProperty("bits", 64) == 32; });
+#if JUCE_WINDOWS
+        if (shown.empty()) m.addItem(-1, us::HostSet::get().winPending() ? "The plug-in hosts are still starting: try again in a moment" : juce::String("No ") + (instruments ? "instrument" : "effect") + " plug-ins found (Common Files\\VST3, VSTPlugins, and the folders in UNDAE_VST_PATH)", false);
+#else
         if (shown.empty()) m.addItem(-1, us::HostSet::get().winPending() ? "Wine is still starting: try again in a moment" : juce::String("No ") + (instruments ? "instrument" : "effect") + " plug-ins found (~/.clap, ~/.vst3, ~/.vst-win)", false);
+#endif
         m.addSeparator(); m.addItem(9999, "Rescan plug-in folders");
         m.showMenuAsync(sp ? juce::PopupMenu::Options().withTargetComponent(sp.getComponent()) : juce::PopupMenu::Options(), [sp, instruments, onPick, shown](int r) {
             if (r == 9999) { if (sp) choosePlugin(sp.getComponent(), instruments, onPick, true); return; }

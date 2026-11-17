@@ -34,9 +34,10 @@ int main(int argc, char** argv) {
     if (argc > 1 && juce::String(argv[1]) == "--scan-json") { juce::Array<juce::var> a; for (auto& p : list) a.add(p); std::cout << juce::JSON::toString(a, true) << "\n"; us::HostSet::get().stop(); return 0; }
     for (auto& p : list) std::cout << "  found: " << p.getProperty("name", "").toString() << " [" << p.getProperty("format", "").toString() << ((bool)p.getProperty("instrument", false) ? ", instrument" : "") << ((bool)p.getProperty("windows", false) ? ", Windows" : "") << ((int)p.getProperty("bits", 64) == 32 ? " 32-bit" : "") << "]\n";
     int fails = 0;
-    auto tryOne = [&](const juce::String& want, bool inst) {
+    auto tryOne = [&](const juce::String& want, int instWanted) {   // instWanted -1: as the scan says
         juce::var slot; for (auto& p : list) if (p.getProperty("name", "").toString() == want) slot = p;
         if (slot.isVoid()) { std::cout << "SKIP  " << want << " not found\n"; return; }
+        const bool inst = instWanted < 0 ? (bool)slot.getProperty("instrument", false) : instWanted != 0;
         juce::var s(new juce::DynamicObject()); auto* o = s.getDynamicObject();
         o->setProperty("path", slot.getProperty("path", "")); o->setProperty("pid", slot.getProperty("id", "")); o->setProperty("fmt", slot.getProperty("format", ""));
         if ((bool)slot.getProperty("windows", false)) o->setProperty("windows", true); if ((int)slot.getProperty("bits", 64) == 32) o->setProperty("bits", 32);
@@ -57,7 +58,10 @@ int main(int argc, char** argv) {
         std::cout << (ok ? "PASS  " : "FAIL  ") << want << ": loaded in " << (int)loadMs << " ms, " << pi.info().params.size() << " parameters, peak " << pk << ", round trip avg " << total / 379 << " ms, worst " << worst << " ms (a block lasts 2.67 ms), missed " << missed << "\n";
         if (!ok) fails++;
     };
-    tryOne("Undae Test Sine", true); tryOne("Surge XT", true); tryOne("Undae Test Gain", false); tryOne("FB-3300", true); tryOne("TAL BitCrusher - TAL", false);
+    // plug-in names on the command line are tested instead of the usual set (an instrument gets a note, an effect a tone)
+    juce::StringArray names; for (int i = 1; i < argc; i++) if (!juce::String(argv[i]).startsWith("--")) names.add(argv[i]);
+    if (names.isEmpty()) { tryOne("Undae Test Sine", 1); tryOne("Surge XT", 1); tryOne("Undae Test Gain", 0); tryOne("FB-3300", 1); tryOne("TAL BitCrusher - TAL", 0); }
+    for (auto& n : names) tryOne(n, -1);
     us::HostSet::get().stop();
     std::cout << (fails ? "FAILED" : "all passed") << "\n"; return fails ? 1 : 0;
 }

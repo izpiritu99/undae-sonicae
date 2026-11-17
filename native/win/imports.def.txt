@@ -1,0 +1,19 @@
+# The Windows functions vsthost.c imports (see winshim.h), by DLL. native\build-win.bat turns each section into a .def
+# file and an import library with dlltool. Linking the system DLLs directly does not work on real Windows: kernel32
+# and user32 forward several of these (critical sections, SRW locks, DefWindowProcA) to ntdll, which ld cannot follow.
+[msvcrt.dll]
+malloc calloc realloc free memcpy memset memcmp memmove strlen strcmp strncmp strchr strrchr strstr _strdup strtod
+sscanf printf fflush _vsnprintf _snprintf getenv fopen fread fseek fclose
+[kernel32.dll]
+LoadLibraryA FreeLibrary GetProcAddress CreateThread GetCurrentThreadId GetCurrentThread SetThreadPriority Sleep
+ExitProcess SetErrorMode GetCommandLineA CreateEventA SetEvent WaitForSingleObject CloseHandle InitializeCriticalSection
+EnterCriticalSection LeaveCriticalSection AcquireSRWLockShared ReleaseSRWLockShared AcquireSRWLockExclusive
+ReleaseSRWLockExclusive GetStdHandle ReadFile FindFirstFileA FindNextFileA FindClose GetModuleHandleA
+[advapi32.dll]
+SystemFunction036
+[ws2_32.dll]
+WSAStartup socket bind listen accept getsockname send recv closesocket shutdown setsockopt
+[user32.dll]
+RegisterClassExA CreateWindowExA DestroyWindow ShowWindow SetWindowPos AdjustWindowRectEx DefWindowProcA PeekMessageA
+TranslateMessage DispatchMessageA MsgWaitForMultipleObjects SetTimer KillTimer LoadCursorA
+SetWindowLongPtrA GetWindowLongPtrA SetWindowLongA GetWindowLongA

@@ -128,10 +128,20 @@ static intptr_t master(AEffect *e, int32_t op, int32_t index, intptr_t value, vo
   return 0;
 }
 
-static char *dos_path(const char *unix_path) {                            // Wine maps drive Z: to the Linux root
-  size_t n = strlen(unix_path); char *p = malloc(n + 3); p[0] = 'Z'; p[1] = ':';
-  for (size_t i = 0; i <= n; i++) p[2 + i] = unix_path[i] == '/' ? '\\' : unix_path[i];
+// A path from the app as Windows sees it. Under Wine the app sends Linux paths, and Wine maps drive Z: to the Linux root.
+// On Windows itself the app sends native paths ("C:\...", "\\server\..."): those only get their slashes evened out.
+static int is_native_path(const char *p) {
+  return (((p[0] | 32) >= 'a' && (p[0] | 32) <= 'z') && p[1] == ':') || ((p[0] == '\\' || p[0] == '/') && (p[1] == '\\' || p[1] == '/'));
+}
+static char *dos_path(const char *unix_path) {
+  size_t n = strlen(unix_path); int pre = is_native_path(unix_path) ? 0 : 2; char *p = malloc(n + 3);
+  if (pre) { p[0] = 'Z'; p[1] = ':'; }
+  for (size_t i = 0; i <= n; i++) p[pre + i] = unix_path[i] == '/' ? '\\' : unix_path[i];
   return p;
+}
+static const char *base_name(const char *path) {                         // after the last / or backslash
+  const char *b = path; for (const char *q = path; *q; q++) if (*q == '/' || *q == '\\') b = q + 1;
+  return b;
 }
 static AEffect *open_plugin(const char *unix_path, void **lib, conn_t *c) {   // [main thread] load the .dll and open the effect
   char *p = dos_path(unix_path); void *h = LoadLibraryA(p); free(p); if (!h) return NULL;
@@ -211,7 +221,7 @@ static void put_params(conn_t *c, sb_t *s, int full) {                    // [ma
 
 static void describe(AEffect *e, const char *path, char *name, char *vendor) {
   get_str(e, effGetEffectName, 0, name); if (!*name) get_str(e, effGetProductString, 0, name);
-  if (!*name) { const char *b = strrchr(path, '/'); copy_str(name, b ? b + 1 : path); char *dot = strrchr(name, '.'); if (dot) *dot = 0; }
+  if (!*name) { copy_str(name, base_name(path)); char *dot = strrchr(name, '.'); if (dot) *dot = 0; }
   get_str(e, effGetVendorString, 0, vendor);
 }
 
@@ -279,15 +289,20 @@ static void scan_file(const char *unix_path, sb_t *s, int *first) {       // [ma
   char name[256], vendor[256]; describe(e, unix_path, name, vendor);
   sb_fmt(s, "%s{\"id\":\"%08x\",\"name\":", *first ? "" : ",", (unsigned)e->uniqueID); *first = 0; sb_json(s, name); sb_str(s, ",\"vendor\":"); sb_json(s, vendor);
   sb_str(s, ",\"version\":\"\",\"path\":"); sb_json(s, unix_path); sb_fmt(s, ",\"format\":\"vst2\",\"windows\":true,\"bits\":%d,\"instrument\":%s}", HOST_BITS, e->flags & flagIsSynth ? "true" : "false");
-  AcquireSRWLockExclusive(&load_lock); e->dispatcher(e, effClose, 0, 0, NULL, 0); ReleaseSRWLockExclusive(&load_lock); FreeLibrary(lib);
+  AcquireSRWLockExclusive(&load_lock); e->dispatcher(e, effClose, 0, 0, NULL, 0); ReleaseSRWLockExclusive(&load_lock);
+  // The DLL stays loaded until the host exits. Some plug-ins leave threads behind after effClose; unloading them under
+  // those threads wedged the next LoadLibrary on real Windows (Klanghelm MJUCjr, then u-he Protoverb, 2026-11-17).
+  // A later load of the same plug-in just takes another reference.
+  (void)lib;
 }
 static void scan_dir(const char *dir, int depth, sb_t *s, int *first) {
-  size_t dl = strlen(dir); char *pat = malloc(dl + 4); memcpy(pat, dir, dl); memcpy(pat + dl, "/*", 3);
+  const char sep = is_native_path(dir) ? '\\' : '/';
+  size_t dl = strlen(dir); char *pat = malloc(dl + 4); memcpy(pat, dir, dl); pat[dl] = sep; memcpy(pat + dl + 1, "*", 2);
   char *dos = dos_path(pat); FIND_DATA *fd = malloc(sizeof *fd); HANDLE h = FindFirstFileA(dos, fd); free(dos); free(pat);
   if (h != (HANDLE)(intptr_t)-1) {
     do {
       if (fd->name[0] == '.') continue;
-      size_t nl = strlen(fd->name); char *p = malloc(dl + nl + 2); memcpy(p, dir, dl); p[dl] = '/'; memcpy(p + dl + 1, fd->name, nl + 1);
+      size_t nl = strlen(fd->name); char *p = malloc(dl + nl + 2); memcpy(p, dir, dl); p[dl] = sep; memcpy(p + dl + 1, fd->name, nl + 1);
       if (is_vst3_name(fd->name)) v3_scan(p, s, first);                 // a .vst3 file or bundle folder
       else if (fd->attr & 0x10) { if (depth < 4) scan_dir(p, depth + 1, s, first); } else if (is_dll(fd->name)) scan_file(p, s, first);
       free(p);

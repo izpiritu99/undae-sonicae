@@ -144,6 +144,9 @@ static std::string windowsPluginFolders(int bits) {
             const juce::File d = juce::File(pf).getChildFile(sub); if (d.isDirectory()) dirs.add(d.getFullPathName());
         }
     }
+    // more folders, separated by ';' (each host skips the plug-ins of the other bitness, so both can scan the same ones)
+    for (auto& f : juce::StringArray::fromTokens(juce::SystemStats::getEnvironmentVariable("UNDAE_VST_PATH", ""), ";", ""))
+        if (f.trim().isNotEmpty() && juce::File(f.trim()).isDirectory()) dirs.addIfNotAlreadyThere(juce::File(f.trim()).getFullPathName());
     return dirs.joinIntoString("\n").toStdString();
 }
 

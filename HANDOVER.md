@@ -702,8 +702,28 @@ Done:
 Checked: `undae-selftest` all passed; `undae-render` renders First Light (23.4 s in 1.9 s); the app plays it through
 WASAPI (average callback 0.76 ms of a 10 ms budget) and the `--snapshot` layout matches Linux.
 
-Not done yet: `undae-compare` against a Linux render; `dos_path()` in `native/win/vsthost.c` (item 3, so the hosts
-find no plug-ins yet); the CLAP host (item 4); shipping `libmp3lame.dll`; the installer (item 9).
+Windows VST hosts (item 3, done the same day):
+- `native/build-win.ps1` builds both hosts on Windows with MinGW-w64 (WinLibs): the same freestanding compile as
+  `build.sh`, plus `-mno-stack-arg-probe`, linked through import libraries that dlltool makes from
+  `native/win/imports.def.txt`. Real Windows' kernel32 / user32 forward some functions to ntdll, which ld cannot link
+  to directly as it does with Wine's DLLs. The 32-bit `.def` lines are `Sleep@4 == Sleep` (names taken from `nm -u`).
+- `dos_path()` passes native paths (`C:\...`, `\\server\...`) through; `base_name()` takes either slash; `scan_dir`
+  builds child paths with the folder's own separator; a `.vst3` folder without `Contents\` (an old flat bundle,
+  TAL-Vocoder-2) loads the DLL inside it directly.
+- The VST2 scan no longer unloads each DLL: on real Windows, freeing Klanghelm MJUCjr wedged the next LoadLibrary
+  (u-he Protoverb). Scanned DLLs stay loaded until the host exits.
+- The rebuilt `native/bin/undae-vsthost*.exe` are committed. On the laptop, run `native/build.sh` after merging so the
+  Wine builds come back from the same source (not tested under Wine).
+- Plug-in folders on Windows: the standard VST2 / VST3 folders plus `UNDAE_VST_PATH` (folders separated by `;`).
+  There is no Settings entry for this yet.
+- `undae-plugtest "Name" ...` tests the named plug-ins (instrument or effect as the scan says) instead of the usual set.
+  Passed on Windows: PG-8X, TAL-BassLine (32-bit), mda Delay (32), dblue Glitch (32), MJUCjr, Protoverb, Graillon 2
+  (VST3), iZotope Vocal Doubler (VST3), at 0.1-0.3 ms per block. FBVC and TAL-Vocoder-2 load and run but stay silent
+  with the test's plain tone (vocoders need a carrier).
+- Some plug-ins write files into the working directory (`MIDI Programs\`) or the Desktop (u-he logs).
+
+Not done yet: `undae-compare` against a Linux render; the CLAP host (item 4); shipping `libmp3lame.dll`; a Settings
+entry for plug-in folders; the installer (item 9).
 
 ### Bringing the work back to Linux
 
