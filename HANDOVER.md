@@ -734,3 +734,116 @@ FAT32 records no file owner, so Git for Windows may call that repository "dubiou
 On the laptop, run `git fetch /run/media/izpiritu/TINGS/undae-sonicae windows`, then merge `FETCH_HEAD` and check that
 the Linux build and the self-test still pass. The laptop repository has the stick as the remote `tings`, so
 `git fetch tings windows` also works there.
+
+## Built-in instruments and effects to replace unlicensed plug-ins (plan, 2026-11-17)
+
+Several commercial plug-ins in `E:\VST` need licences the owner no longer has. The aim is original built-in
+equivalents that do the same *kinds* of job, not copies. Rules for everything built here: original names, parameter
+sets, presets and UI (the app's own Theme and generic knob panel); no product names or trademarks in the app, no
+look-alike layouts, no copied factory presets. The survey below used file and folder names only, plus public knowledge
+of each product category; nothing was disassembled, decompiled or extracted.
+
+### Survey: what the third-party plug-ins are for (by category)
+
+A category marked (?) is a guess from the name alone.
+
+| Category | `E:\VST` | FL Studio `Plugins\Fruity` |
+|---|---|---|
+| Synths | Serum, Zebra2, Zebralette, TyrellN6, Podolski (installer only), PG-8X, TAL-BassLine, TAL-Elek7ro-II, monofury, nabla, mps (?), oxid (?), Orpheus (?), expo (?) | 3x Osc, Sytrus, Harmor, Harmless, Morphine, PoiZone, Sakura, Sawer, SimSynth, Toxic Biohazard, Transistor Bass, Wasp/XT, DX10, BooBass, Plucked!, GMS, Kepler/Exo, FL Keys, Minisynth, BeepMap, Autogun |
+| Samplers / ROMplers / granular | LABS, Nexus (content only), Ribs, grainstrain | DirectWave, FLEX, Slicex, Fruity Slicer/2, Fruity Granulizer, Soundfont Player, Wave Traveller |
+| Drum machines | MT-PowerDrumKit, mda BeatBox | FPC, Drumaxx, Fruity DrumSynth Live, BassDrum, Fruit Kick, Drumpad |
+| EQ | SSL Fusion Violet EQ, SSL 4K B / 4K G, SSL Channel Strip 2, Harrison 32Classic Channel Strip / 32Bus, SSL X-DynEQ (dynamic) | Fruity Parametric EQ/2, 7 Band EQ, EQUO, Bass Boost, Low Lifter |
+| Compressor / limiter / transient | SSL X-Comp, Bus Compressor 2, Fusion HF Compressor, RoughRider3, MJUCjr, Harrison DynoMite, Couture (transients), mda Dynamics / Limiter / MultiBand | Fruity Compressor, Limiter, Multiband Compressor, Maximus, Soundgoodizer, Transient Processor |
+| Saturation / tape / tube / exciter | TubeSaturatorVintage, SSL X-Saturator, Fusion Vintage Drive, Fusion Transformer, ThrillseekerXTC, La Petite Excite, mda Overdrive / Bandisto / Combo, Frohmage, Bee-Happy (?), SL84 (?) | Fruity Blood Overdrive, Fast Dist, Soft Clipper, WaveShaper, Distructor, Hardcore, Emphasis / Emphasizer |
+| Reverb | ZRev, SSL GateVerb | Fruity Reeverb/2, Luxeverb, Fruity Convolver |
+| Delay | SSL X-Delay, X-Echo, mda Delay / DubDelay | Fruity Delay/2/3, Delay Bank, Multiband Delay |
+| Chorus / phaser / flanger / rotary | Acon Multiply, azurite (?), Harrison StunningPhaser, mda ThruZero / Detune / Leslie / RingMod / RoundPan | Fruity Chorus, Flanger, Flangus, Phaser, Vintage Chorus / Phaser, Hyper Chorus, Frequency Shifter, PanOMatic |
+| Vocoder / talkbox | TAL-Vocoder-2, fbvc, mda Vocoder / Talkbox / VocInput | Fruity Vocoder, Vocodex |
+| Pitch correction / formant / doubler | Auto-Tune 8.1, Graillon 2, Vocal Doubler, LALA (?), Martin Eastwood Duet (?), mda RePsycho! / Shepard | Newtone, Pitcher, Pitch Shifter, Newtime |
+| De-esser | SSL DeEss, Harrison De-Esser, SPITFISH, mda De-ess | – (EQ / multiband instead) |
+| Gate | Harrison SpectralGate, SSL GateVerb (gated reverb) | Fruity Mute 2 (?), Gross Beat (volume gating) |
+| Stereo imaging | SSL Fusion Stereo Image, mda Stereo / Image / Splitter | Fruity Stereo Enhancer, Stereo Shaper, Spreader, Center, Phase Inverter |
+| Glitch / stutter / tape stop | dblue Glitch / TapeStop / Stretch, Fracture, Hysteresis | Gross Beat, Fruity Scratcher, Effector |
+| Bitcrusher / lo-fi | dblue Crusher, SSL Digicrush, mda Degrade, iZotope Vinyl | Fruity Squeeze (?), Effector |
+| Analyzers / meters | JScope, mda TestTone | Wave Candy, Spectroman, dB Meter, Tuner |
+| Channel strips / vocal chains | SSL Vocalstrip 2, Sourcerer (?), Harrison VocalFlow / VocalIntensityProcessor | – |
+| Note tools (MIDI) | hypercyclic (arpeggiator), 1208 SEQ (step sequencer) | VFX Sequencer, Key Mapper, Keyboard Splitter |
+
+The owner is right that most are effects: roughly 70 effects against 20 instruments in `E:\VST`.
+
+### What the native engine already has
+
+- Effects (`cpp/src/engine/Effects.cpp`, listed for the UI in `cpp/src/app/Doc.cpp` `fxSpecs()`): 3-band EQ (low
+  shelf / peak / high shelf), filter (LP / HP / BP / notch), compressor and limiter (soft knee, 6 ms look-ahead),
+  reverb (convolution with a generated noise tail), delay (feedback with tone), chorus, phaser (4 all-pass stages),
+  distortion (tanh), bitcrush (bit depth only), peak controller (side-chain ducking, whole or one band).
+- Instruments: the subtractive / FM synth (`Voices.cpp`: 3 oscillators with morph and unison, sub, noise, FM, ring,
+  two filters, shaper, 4 envelopes, 3 LFOs, 8-slot mod matrix, glide / slides), the sample player, the synthesised
+  808-style kit and keys sound (`Samples.cpp`), Sound Design one-shots (`SoundDesign.cpp`), YIN pitch tracking
+  (`Analysis.cpp`, offline only).
+- Adding a built-in effect takes three pieces: a class in `Effects.cpp`, a line in `makeEffect()`, and an `FxSpec`
+  in `fxSpecs()`. The Mixer's "+ Add effect" menu, Sound Design, Settings and automation pick it up from there. The
+  side-chain path (`sideSource()` / `side()`) already exists for the peak controller, so a vocoder or a keyed gate can
+  take its carrier / key from another bus.
+- Caution: the Electron edition's `makeFx` (`app/js/audio/fx.js`) fails on an effect type it does not know. Before a
+  project that uses a new effect is opened there, either port the effect or make unknown types pass audio through.
+
+### Gaps, in the order to fill them
+
+Working names are original and can change. DSP is standard published technique only.
+
+1. **Parametric EQ ("Contour")**: 6 bands (high-pass, low shelf, 3 peaks, high shelf, low-pass), RBJ cookbook
+   biquads, HP / LP at 12 or 24 dB/oct (cascaded), output trim. Covers the channel-strip EQs and the multi-band EQs;
+   the biggest single gap. A live response curve comes later with the analyser (11).
+2. **De-esser ("Sibilant")**: detector on a high-passed copy, fast envelope, gain reduction applied to the whole
+   signal or only above the split (complementary crossover), listen switch for the detector band.
+3. **Gate / expander ("Hush")**: open / close thresholds (hysteresis), attack / hold / release, range (an expander
+   when less than full), detector high-pass, optional key from another bus (the existing side-chain path).
+4. **Saturation ("Ember")**: modes tape / tube / transformer / clip, oversampled waveshapers: asymmetric biased tanh
+   (tube, even harmonics), soft clip with pre / de-emphasis and a gentle low bump (tape), cubic with low-frequency
+   weighting (transformer); drive, bias, tone, mix, output. Exciter mode: saturate only a high-passed band and add it.
+5. **Transient shaper ("Snap")**: fast and slow envelope followers; their difference drives the gain for attack and
+   sustain, each +-100 %.
+6. **Stereo imager ("Breadth")**: mid / side width 0-200 %, mono below a crossover (bass mono), balance, optional
+   Haas widening for mono sources, correlation readout.
+7. **Algorithmic reverb ("Vault")**: 8-line feedback delay network, Hadamard mixing matrix, mutually prime delay
+   lengths, slow delay modulation, input diffusion all-passes, one-pole damping per line for decay vs frequency;
+   modes room / hall / plate / gated. Lighter and more controllable than the noise convolution, which stays.
+8. **Delay upgrade ("Echo Line")**: tempo sync (the effect needs the project tempo: add it to `Effect` next to
+   `frame`), ping-pong, stereo offset, filtered / saturated feedback, wow / flutter, wet ducked by the dry.
+9. **Glitch / stutter / tape stop ("Splinter")**: a tempo-synced capture buffer; per step it repeats a slice (1/4 to
+   1/64), reverses it, slows it to a stop (variable-rate read) or gates it. Needs tempo and song position (as 8).
+10. **Vocoder ("Choir of Wires")**: filter bank of 8-32 log-spaced band-pass pairs, envelope followers on the
+    modulator, carrier from another bus via the side chain or a built-in saw / noise carrier, an unvoiced (noise)
+    band for consonants, band shift for formant effects.
+11. **Analyser and meters**: FFT spectrum (Hann, 4096, log frequency axis), oscilloscope, true-peak and LUFS meter
+    (ITU-R BS.1770 K-weighting: momentary / short-term / integrated), phase correlation, a tuner from the existing
+    YIN code. More UI than DSP.
+12. **Pitch correction and formant ("True North")**: real-time YIN (the existing `yin()` made incremental) ->
+    nearest note in the project key / a chosen scale -> retune-speed smoothing -> PSOLA pitch shift on the detected
+    periods (keeps formants); formant shift by resampling the grains. The hardest item (latency, warble on breathy
+    input). A doubler (two or three short delayed copies a few cents apart, panned) comes nearly free from the shifter.
+13. **Multiband compressor ("Tiers")**: 3 bands, Linkwitz-Riley 4th-order crossovers, the existing `Compressor` per
+    band. A dynamic-EQ mode later.
+14. **Modulation extras**: flanger (short modulated delay with feedback, through-zero option), ring modulator,
+    frequency shifter (Hilbert transform from an IIR all-pass pair), rotary speaker (amplitude + Doppler on two rotors
+    with a crossover), tempo-synced auto-pan / tremolo.
+15. **Lo-fi ("Dust")**: sample-rate reduction (sample and hold), bit depth with dither, generated vinyl noise /
+    crackle, wow, band-limiting.
+
+Instruments (the synth already covers most subtractive and FM jobs; these fill what it cannot):
+
+- **Wavetable mode for the synth**: original generated tables (additive spectra, formant sweeps, PWM / sync series),
+  frame position on the mod matrix. Covers the wavetable synths.
+- **Granular sampler**: grains from a sample (position, size, density, spray, pitch, reverse), Hann window, as a
+  channel type. Covers the granular / texture instruments.
+- **Multi-sample instrument**: key / velocity zones from imported samples, round robin, loop points; a drum-pad
+  variant maps pads to samples with choke groups (the engine already has choke groups).
+- **Plucked string / physical models**: Karplus-Strong with fractional-delay tuning and a damping filter; modal
+  resonators for mallets and bars.
+- **Arpeggiator / step sequencer** on synth channels, note-level before the voices.
+- **Original preset banks** for the existing synth in the styles vintage polys and acid basslines are used for
+  (a style, not a product), written from scratch.
+
+Suggested order: 1 (EQ) and 2 (de-esser) together, as they share filters and sit on nearly every vocal; then 4, 3,
+6, 7; then the tempo-aware 8 and 9; then 10 and 12.
