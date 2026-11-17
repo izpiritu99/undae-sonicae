@@ -1,20 +1,39 @@
 #include "Mp3.h"
-#include <dlfcn.h>
+#if defined(_WIN32)
+ #include <windows.h>
+#else
+ #include <dlfcn.h>
+#endif
 #include <stdexcept>
 #include <vector>
 
 namespace us {
 
 namespace {
+#if defined(_WIN32)
+// libmp3lame.dll next to the exe first, then wherever Windows looks for DLLs
+static void* openLame() {
+    const auto dir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
+    for (const char* n : { "libmp3lame.dll", "lame_enc.dll", "mp3lame.dll" }) {
+        if (auto h = LoadLibraryW(dir.getChildFile(n).getFullPathName().toWideCharPointer())) return (void*)h;
+        if (auto h = LoadLibraryA(n)) return (void*)h;
+    }
+    return nullptr;
+}
+static void* lameSym(void* h, const char* s) { return (void*)GetProcAddress((HMODULE)h, s); }
+#else
+static void* openLame() { for (const char* n : { "libmp3lame.so.0", "libmp3lame.so" }) if (void* h = dlopen(n, RTLD_NOW | RTLD_LOCAL)) return h; return nullptr; }
+static void* lameSym(void* h, const char* s) { return dlsym(h, s); }
+#endif
 struct Lame {
     void* h = nullptr;
     void* (*init)() = nullptr; int (*setRate)(void*, int) = nullptr; int (*setOutRate)(void*, int) = nullptr; int (*setChannels)(void*, int) = nullptr; int (*setBrate)(void*, int) = nullptr;
     int (*setQuality)(void*, int) = nullptr; int (*initParams)(void*) = nullptr; int (*encode)(void*, const float*, const float*, int, unsigned char*, int) = nullptr;
     int (*flush)(void*, unsigned char*, int) = nullptr; int (*close)(void*) = nullptr;
     Lame() {
-        for (const char* n : { "libmp3lame.so.0", "libmp3lame.so" }) if ((h = dlopen(n, RTLD_NOW | RTLD_LOCAL))) break;
+        h = openLame();
         if (!h) return;
-        auto f = [this](const char* s) { return dlsym(h, s); };
+        auto f = [this](const char* s) { return lameSym(h, s); };
         init = (void* (*)())f("lame_init"); setRate = (int (*)(void*, int))f("lame_set_in_samplerate"); setOutRate = (int (*)(void*, int))f("lame_set_out_samplerate");
         setChannels = (int (*)(void*, int))f("lame_set_num_channels"); setBrate = (int (*)(void*, int))f("lame_set_brate"); setQuality = (int (*)(void*, int))f("lame_set_quality");
         initParams = (int (*)(void*))f("lame_init_params"); encode = (int (*)(void*, const float*, const float*, int, unsigned char*, int))f("lame_encode_buffer_ieee_float");

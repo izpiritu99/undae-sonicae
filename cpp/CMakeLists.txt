@@ -8,6 +8,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
+if(MSVC)
+  add_compile_definitions(_USE_MATH_DEFINES)   # M_PI and friends
+  add_compile_options(/utf-8)                  # the sources are UTF-8
+endif()
 
 add_subdirectory(third_party/JUCE EXCLUDE_FROM_ALL)
 
@@ -18,11 +22,17 @@ target_include_directories(us_engine PUBLIC src)
 target_link_libraries(us_engine
   PUBLIC juce::juce_core juce::juce_audio_basics juce::juce_audio_formats juce::juce_dsp
   PRIVATE juce::juce_recommended_config_flags)
-target_compile_options(us_engine PRIVATE -Wall -Wextra -Wno-unused-parameter)
+if(MSVC)
+  target_compile_options(us_engine PRIVATE /W3)
+  target_compile_definitions(us_engine PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
+  target_link_libraries(us_engine PUBLIC ws2_32 psapi)
+else()
+  target_compile_options(us_engine PRIVATE -Wall -Wextra -Wno-unused-parameter)
+endif()
 target_link_libraries(us_engine PUBLIC ${CMAKE_DL_LIBS})
 target_compile_definitions(us_engine PUBLIC JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 JUCE_STANDALONE_APPLICATION=1 JUCE_USE_MP3AUDIOFORMAT=1 JUCE_USE_FLAC=1 JUCE_USE_OGGVORBIS=1)
 set_target_properties(us_engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT MSVC)
   target_compile_options(us_engine PRIVATE -O3)
 endif()
 
@@ -40,7 +50,10 @@ target_sources(UndaeSonicae PRIVATE src/app/AppMain.cpp src/app/Doc.cpp)
 target_include_directories(UndaeSonicae PRIVATE src/app)
 target_link_libraries(UndaeSonicae PRIVATE us_engine juce::juce_gui_extra juce::juce_audio_utils juce::juce_audio_devices
   juce::juce_recommended_config_flags juce::juce_recommended_lto_flags)
-target_compile_definitions(UndaeSonicae PRIVATE JUCE_APPLICATION_NAME_STRING="Undae Sonicae" JUCE_APPLICATION_VERSION_STRING="0.3.0" JUCE_JACK=1 JUCE_ALSA=1)
+target_compile_definitions(UndaeSonicae PRIVATE JUCE_APPLICATION_NAME_STRING="Undae Sonicae" JUCE_APPLICATION_VERSION_STRING="0.3.0")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_compile_definitions(UndaeSonicae PRIVATE JUCE_JACK=1 JUCE_ALSA=1)
+endif()
 
 juce_add_console_app(undae-compare PRODUCT_NAME "undae-compare")
 target_sources(undae-compare PRIVATE src/render/CompareMain.cpp)

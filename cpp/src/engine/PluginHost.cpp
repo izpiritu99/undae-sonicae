@@ -1,17 +1,47 @@
+#if defined(_WIN32)
+ #include <winsock2.h>
+ #include <ws2tcpip.h>
+ #include <windows.h>
+#endif
 #include "PluginHost.h"
-#include <arpa/inet.h>
-#include <netdb.h>
 #include <cmath>
 #include <csignal>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <poll.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#if !defined(_WIN32)
+ #include <arpa/inet.h>
+ #include <netdb.h>
+ #include <fcntl.h>
+ #include <netinet/in.h>
+ #include <netinet/tcp.h>
+ #include <poll.h>
+ #include <sys/socket.h>
+ #include <sys/wait.h>
+ #include <unistd.h>
+#endif
 
 namespace us {
+
+// --- sockets: the few calls that differ between Winsock and BSD sockets --------------------------------------------
+#if defined(_WIN32)
+using SockT = SOCKET;
+static constexpr int kSendFlags = 0;   // Winsock raises no SIGPIPE
+static void closeSock(std::intptr_t s) { closesocket((SOCKET)s); }
+static void shutSock(std::intptr_t s) { shutdown((SOCKET)s, SD_BOTH); }
+static void setTimeout(std::intptr_t s, int opt, int sec) { DWORD ms = (DWORD)sec * 1000; setsockopt((SOCKET)s, SOL_SOCKET, opt, (const char*)&ms, sizeof ms); }
+static void netInit() { static const bool ok = [] { WSADATA w; return WSAStartup(MAKEWORD(2, 2), &w) == 0; }(); (void)ok; }
+#else
+using SockT = int;
+static constexpr int kSendFlags = MSG_NOSIGNAL;
+static void closeSock(std::intptr_t s) { close((int)s); }
+static void shutSock(std::intptr_t s) { shutdown((int)s, SHUT_RDWR); }
+static void setTimeout(std::intptr_t s, int opt, int sec) { timeval tv{ sec, 0 }; setsockopt((int)s, SOL_SOCKET, opt, &tv, sizeof tv); }
+static void netInit() {}
+#endif
+static constexpr const char* kHostMarker =
+#if defined(_WIN32)
+    "undae-vsthost.exe";   // no CLAP host on Windows yet: the VST host marks the folder
+#else
+    "undae-host";
+#endif
 
 // --- host processes ------------------------------------------------------------------------------------------------
 HostSet& HostSet::get() { static HostSet h; return h; }
@@ -19,14 +49,64 @@ HostSet& HostSet::get() { static HostSet h; return h; }
 juce::File HostSet::findBinDir() {
     auto exe = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
     for (auto d = exe.getParentDirectory(); d.getFullPathName().length() > 1; d = d.getParentDirectory()) {
-        if (d.getChildFile("undae-host").existsAsFile()) return d;
-        if (d.getChildFile("native/bin/undae-host").existsAsFile()) return d.getChildFile("native/bin");
+        if (d.getChildFile(kHostMarker).existsAsFile()) return d;
+        if (d.getChildFile("native/bin").getChildFile(kHostMarker).existsAsFile()) return d.getChildFile("native/bin");
+        if (d.isRoot()) break;
     }
     auto cwd = juce::File::getCurrentWorkingDirectory();
-    for (auto d = cwd; d.getFullPathName().length() > 1; d = d.getParentDirectory()) if (d.getChildFile("native/bin/undae-host").existsAsFile()) return d.getChildFile("native/bin");
+    for (auto d = cwd; d.getFullPathName().length() > 1; d = d.getParentDirectory()) { if (d.getChildFile("native/bin").getChildFile(kHostMarker).existsAsFile()) return d.getChildFile("native/bin"); if (d.isRoot()) break; }
     return {};
 }
 
+#if defined(_WIN32)
+// Windows: CreateProcess with stdout and stdin on pipes, and the extra variables added to a copy of this environment.
+static std::wstring quoteArg(const std::wstring& a) {
+    if (!a.empty() && a.find_first_of(L" \t\"") == std::wstring::npos) return a;
+    std::wstring q = L"\""; size_t bs = 0;
+    for (wchar_t c : a) { if (c == L'\\') { bs++; continue; } if (c == L'"') q.append(bs * 2 + 1, L'\\'); else q.append(bs, L'\\'); bs = 0; q += c; }
+    q.append(bs * 2, L'\\'); return q + L"\"";
+}
+HostSet::Proc HostSet::spawn(const std::string& exe, const std::vector<std::string>& args, const std::vector<std::pair<std::string, std::string>>& env, double timeoutSec) {
+    Proc p; auto W = [](const std::string& s) { return std::wstring(juce::String::fromUTF8(s.c_str()).toWideCharPointer()); };
+    SECURITY_ATTRIBUTES sa{ sizeof sa, nullptr, TRUE };
+    HANDLE outR = nullptr, outW = nullptr, inR = nullptr, inW = nullptr;
+    if (!CreatePipe(&outR, &outW, &sa, 0)) return p;
+    if (!CreatePipe(&inR, &inW, &sa, 0)) { CloseHandle(outR); CloseHandle(outW); return p; }
+    SetHandleInformation(outR, HANDLE_FLAG_INHERIT, 0); SetHandleInformation(inW, HANDLE_FLAG_INHERIT, 0);   // the app's ends stay here
+    // environment block: this process's variables, minus the ones being set, then the new ones
+    std::vector<std::wstring> vars;
+    if (wchar_t* blk = GetEnvironmentStringsW()) {
+        for (const wchar_t* e = blk; *e; e += wcslen(e) + 1) {
+            std::wstring v(e); bool replaced = false;
+            for (auto& [k, val] : env) { std::wstring kw = W(k) + L"="; if (_wcsnicmp(v.c_str(), kw.c_str(), kw.size()) == 0) replaced = true; }
+            if (!replaced) vars.push_back(v);
+        }
+        FreeEnvironmentStringsW(blk);
+    }
+    for (auto& [k, v] : env) vars.push_back(W(k) + L"=" + W(v));
+    std::wstring envBlock; for (auto& v : vars) { envBlock += v; envBlock += L'\0'; } envBlock += L'\0';
+    std::wstring cmd = quoteArg(W(exe)); for (auto& a : args) cmd += L" " + quoteArg(W(a));
+    STARTUPINFOW si{}; si.cb = sizeof si; si.dwFlags = STARTF_USESTDHANDLES; si.hStdOutput = outW; si.hStdInput = inR; si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    PROCESS_INFORMATION pi{};
+    const BOOL ok = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW, envBlock.data(), nullptr, &si, &pi);
+    CloseHandle(outW); CloseHandle(inR);
+    if (!ok) { CloseHandle(outR); CloseHandle(inW); return p; }
+    CloseHandle(pi.hThread);
+    // the first line of stdout: {"port":N,"token":"..."}
+    std::string line; const double t0 = juce::Time::getMillisecondCounterHiRes();
+    while (juce::Time::getMillisecondCounterHiRes() - t0 < timeoutSec * 1000) {
+        DWORD avail = 0; if (!PeekNamedPipe(outR, nullptr, 0, nullptr, &avail, nullptr)) break;   // fails once the host has exited
+        if (!avail) { Sleep(20); continue; }
+        char c; DWORD k = 0; if (!ReadFile(outR, &c, 1, &k, nullptr) || !k) break;
+        if (c == '\n') break; if (c != '\r') line += c;
+    }
+    CloseHandle(outR);
+    juce::var j; juce::JSON::parse(juce::String(line), j);
+    if ((int)j.getProperty("port", 0) > 0) { p.proc = pi.hProcess; p.in = inW; p.ep.port = (int)j.getProperty("port", 0); p.ep.token = j.getProperty("token", "").toString().toStdString(); }
+    else { CloseHandle(inW); TerminateProcess(pi.hProcess, 1); CloseHandle(pi.hProcess); }
+    return p;
+}
+#else
 HostSet::Proc HostSet::spawn(const std::string& exe, const std::vector<std::string>& args, const std::vector<std::pair<std::string, std::string>>& env, double timeoutSec) {
     Proc p; int out[2], in[2];
     if (pipe(out) || pipe(in)) return p;
@@ -52,7 +132,46 @@ HostSet::Proc HostSet::spawn(const std::string& exe, const std::vector<std::stri
     else { close(in[1]); kill(pid, SIGKILL); waitpid(pid, nullptr, 0); }
     return p;
 }
+#endif
 
+#if defined(_WIN32)
+// The standard VST folders; the hosts take them as one string, one folder per line (scanPlugins splits it).
+static std::string windowsPluginFolders(int bits) {
+    juce::StringArray dirs;
+    for (auto var : { bits == 64 ? "ProgramW6432" : "ProgramFiles(x86)" }) {
+        const auto pf = juce::SystemStats::getEnvironmentVariable(var, bits == 64 ? "C:\\Program Files" : "C:\\Program Files (x86)");
+        for (auto sub : { "Common Files\\VST3", "VSTPlugins", "Steinberg\\VSTPlugins", "Common Files\\VST2", "Common Files\\Steinberg\\VST2" }) {
+            const juce::File d = juce::File(pf).getChildFile(sub); if (d.isDirectory()) dirs.add(d.getFullPathName());
+        }
+    }
+    return dirs.joinIntoString("\n").toStdString();
+}
+
+void HostSet::start(const juce::File& binDir, bool serial) {
+    std::lock_guard<std::mutex> lk(m); if (started) return; started = true; bin = binDir;
+    const std::string ser = serial ? "1" : "0";
+    clapP.ep.folder = bin.getFullPathName().toStdString();   // no CLAP host on Windows yet; CLAP slots pass audio through
+    for (int bits : { 64, 32 }) {   // the VST hosts run directly; the 32-bit one under WoW64
+        const juce::File exe = bin.getChildFile(bits == 64 ? "undae-vsthost.exe" : "undae-vsthost32.exe"); if (!exe.existsAsFile()) continue;
+        pending++;
+        std::thread([this, exe, bits, ser] {
+            const std::string tok = juce::String::toHexString(juce::Random::getSystemRandom().nextInt64()).toStdString() + juce::String::toHexString(juce::Random::getSystemRandom().nextInt64()).toStdString();
+            Proc p = spawn(exe.getFullPathName().toStdString(), { "--child" }, { { "UNDAE_HOST_TOKEN", tok }, { "UNDAE_SERIAL", ser } }, 30);
+            p.ep.folder = windowsPluginFolders(bits);
+            { std::lock_guard<std::mutex> l(m); (bits == 64 ? win64 : win32) = p; }
+            pending--;
+        }).detach();
+    }
+}
+void HostSet::stop() {
+    std::lock_guard<std::mutex> lk(m);
+    for (Proc* p : { &clapP, &win64, &win32 }) if (p->proc) {
+        CloseHandle((HANDLE)p->in);   // the hosts exit when their stdin closes; give them a moment, then end them
+        if (WaitForSingleObject((HANDLE)p->proc, 500) != WAIT_OBJECT_0) TerminateProcess((HANDLE)p->proc, 0);
+        CloseHandle((HANDLE)p->proc); p->proc = p->in = nullptr;
+    }
+}
+#else
 void HostSet::start(const juce::File& binDir, bool serial) {
     std::lock_guard<std::mutex> lk(m); if (started) return; started = true; bin = binDir;
 #if JUCE_ANDROID
@@ -81,24 +200,33 @@ void HostSet::stop() {
     std::lock_guard<std::mutex> lk(m);
     for (Proc* p : { &clapP, &win64, &win32 }) if (p->pid > 0) { close(p->in); kill(p->pid, SIGTERM); waitpid(p->pid, nullptr, WNOHANG); p->pid = -1; }
 }
+#endif
 HostEndpoint HostSet::clap() const { std::lock_guard<std::mutex> lk(m); return remoteOn ? rClap : clapP.ep; }
 HostEndpoint HostSet::win(int bits) const { std::lock_guard<std::mutex> lk(m); if (remoteOn) return bits == 32 ? rWin32 : rWin64; return bits == 32 ? win32.ep : win64.ep; }
 
-static int dial(const std::string& host, int port) {   // TCP to host:port (a name or an address)
+static std::intptr_t dial(const std::string& host, int port) {   // TCP to host:port (a name or an address); -1 on failure
+    netInit();
     addrinfo hints{}, *res = nullptr; hints.ai_family = AF_INET; hints.ai_socktype = SOCK_STREAM;
     if (getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &res) || !res) return -1;
-    const int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (fd >= 0) { timeval tv{ 5, 0 }; setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv); if (::connect(fd, res->ai_addr, res->ai_addrlen)) { close(fd); freeaddrinfo(res); return -1; } }
+    const SockT s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+#if defined(_WIN32)
+    if (s == INVALID_SOCKET) { freeaddrinfo(res); return -1; }
+#else
+    if (s < 0) { freeaddrinfo(res); return -1; }
+#endif
+    const std::intptr_t fd = (std::intptr_t)s;
+    setTimeout(fd, SO_SNDTIMEO, 5);
+    if (::connect(s, res->ai_addr, (int)res->ai_addrlen)) { closeSock(fd); freeaddrinfo(res); return -1; }
     freeaddrinfo(res); return fd;
 }
 std::string HostSet::useServer(const std::string& addrIn, const std::string& code, std::string* name) {
     std::string addr = addrIn; const auto sch = addr.find("://"); if (sch != std::string::npos) addr = addr.substr(sch + 3); if (addr.find('/') != std::string::npos) addr = addr.substr(0, addr.find('/'));
     if (addr.empty()) { std::lock_guard<std::mutex> lk(m); remoteOn = false; return {}; }
     std::string host = addr; int port = 47800; const auto c = addr.rfind(':'); if (c != std::string::npos) { host = addr.substr(0, c); port = std::atoi(addr.substr(c + 1).c_str()); }
-    const int fd = dial(host, port); if (fd < 0) return "No answer from " + host + ":" + std::to_string(port) + ". Is sharing on there, and are both on the same network?";
-    timeval tv{ 5, 0 }; setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
-    const std::string req = "GET /share.json?code=" + code + " HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"; send(fd, req.data(), req.size(), MSG_NOSIGNAL);
-    std::string resp; char buf[4096]; ssize_t k; while ((k = recv(fd, buf, sizeof buf, 0)) > 0) resp.append(buf, (size_t)k); close(fd);
+    const std::intptr_t fd = dial(host, port); if (fd < 0) return "No answer from " + host + ":" + std::to_string(port) + ". Is sharing on there, and are both on the same network?";
+    setTimeout(fd, SO_RCVTIMEO, 5);
+    const std::string req = "GET /share.json?code=" + code + " HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"; send((SockT)fd, req.data(), (int)req.size(), kSendFlags);
+    std::string resp; char buf[4096]; for (;;) { const auto k = recv((SockT)fd, buf, (int)sizeof buf, 0); if (k <= 0) break; resp.append(buf, (size_t)k); } closeSock(fd);
     if (resp.find(" 403 ") != std::string::npos) return "Wrong pairing code";
     if (resp.find(" 429 ") != std::string::npos) return "Too many wrong codes: wait a minute";
     const auto b0 = resp.find('{'), b1 = resp.rfind('}'); juce::var j;   // the JSON body (Node sends it chunked)
@@ -116,24 +244,27 @@ std::string HostSet::useServer(const std::string& addrIn, const std::string& cod
 static bool isWindowsSlot(const juce::var& s) {
     const auto fmt = s.getProperty("fmt", "").toString();
     if (fmt == "vst2") return true;
+#if defined(_WIN32)
+    if (fmt == "vst3") return true;   // every VST3 here is a Windows one, in the VST host
+#endif
     if (fmt == "vst3") { const auto w = s.getProperty("windows", juce::var()); return w.isVoid() ? s.getProperty("path", "").toString().contains("/.vst-win/") : (bool)w; }
     return false;
 }
 HostEndpoint endpointFor(const juce::var& s) { return isWindowsSlot(s) ? HostSet::get().win((int)s.getProperty("bits", 64) == 32 ? 32 : 64) : HostSet::get().clap(); }
 
 // --- WebSocket client ----------------------------------------------------------------------------------------------
-static bool writeAll(int fd, const void* p, size_t n) { auto* c = (const char*)p; while (n) { const ssize_t k = send(fd, c, n, MSG_NOSIGNAL); if (k <= 0) return false; c += k; n -= (size_t)k; } return true; }
-static bool readAll(int fd, void* p, size_t n) { auto* c = (char*)p; while (n) { const ssize_t k = recv(fd, c, n, 0); if (k <= 0) return false; c += k; n -= (size_t)k; } return true; }
+static bool writeAll(std::intptr_t fd, const void* p, size_t n) { auto* c = (const char*)p; while (n) { const auto k = send((SockT)fd, c, (int)std::min<size_t>(n, 1 << 30), kSendFlags); if (k <= 0) return false; c += k; n -= (size_t)k; } return true; }
+static bool readAll(std::intptr_t fd, void* p, size_t n) { auto* c = (char*)p; while (n) { const auto k = recv((SockT)fd, c, (int)std::min<size_t>(n, 1 << 30), 0); if (k <= 0) return false; c += k; n -= (size_t)k; } return true; }
 
 bool PluginInstance::connect(const HostEndpoint& ep) {
     fd = dial(ep.host, ep.port); if (fd < 0) { fd = -1; return false; }
     remote = ep.host != "127.0.0.1";
-    int one = 1; setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);   // small audio blocks: no batching
+    int one = 1; setsockopt((SockT)fd, IPPROTO_TCP, TCP_NODELAY, (const char*)&one, sizeof one);   // small audio blocks: no batching
     const std::string req = "GET " + (ep.path.empty() ? "/?t=" + ep.token : ep.path) + " HTTP/1.1\r\nHost: " + ep.host + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
     if (!writeAll(fd, req.data(), req.size())) return false;
     std::string resp; char c;
-    while (resp.find("\r\n\r\n") == std::string::npos && resp.size() < 4096) { if (recv(fd, &c, 1, 0) <= 0) return false; resp += c; }
-    if (resp.find(" 101 ") == std::string::npos) { close(fd); fd = -1; return false; }
+    while (resp.find("\r\n\r\n") == std::string::npos && resp.size() < 4096) { if (recv((SockT)fd, &c, 1, 0) <= 0) return false; resp += c; }
+    if (resp.find(" 101 ") == std::string::npos) { closeSock(fd); fd = -1; return false; }
     running = true; reader = std::thread([this] { readLoop(); });
     return true;
 }
@@ -180,9 +311,9 @@ void PluginInstance::readLoop() {
 
 PluginInstance::~PluginInstance() {
     running = false;
-    if (fd >= 0) { shutdown(fd, SHUT_RDWR); }
+    if (fd >= 0) { shutSock(fd); }
     if (reader.joinable()) reader.join();
-    if (fd >= 0) close(fd);
+    if (fd >= 0) closeSock(fd);
 }
 
 juce::var PluginInstance::request(const juce::var& msg, int timeoutMs) {
@@ -250,7 +381,8 @@ std::vector<juce::var> scanPlugins() {
     auto run = [&](HostEndpoint ep, bool windows, int bits, int timeout) {
         if (!ep.ok()) return;
         PluginInstance c; if (!c.attach(ep)) return;
-        juce::Array<juce::var> paths; if (!ep.folder.empty()) paths.add(juce::String(ep.folder));
+        juce::Array<juce::var> paths;   // one folder, or several, one per line (the Windows VST folders)
+        for (auto& f : juce::StringArray::fromLines(juce::String::fromUTF8(ep.folder.c_str()))) if (f.isNotEmpty()) paths.add(f);
         auto r = c.request(obj({ { "op", "scan" }, { "paths", paths } }), timeout);
         if (auto* a = r.getProperty("plugins", juce::var()).getArray())
             for (auto& pl : *a) {

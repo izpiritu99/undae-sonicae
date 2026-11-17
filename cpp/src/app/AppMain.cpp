@@ -29,6 +29,11 @@
 #include <unistd.h>
 #include <dirent.h>
 #endif
+#if JUCE_WINDOWS
+#include <windows.h>
+#include <tlhelp32.h>
+#include <psapi.h>
+#endif
 
 namespace ui {
 
@@ -61,6 +66,22 @@ struct Load {
         const double now = juce::Time::getMillisecondCounterHiRes() / 1000.0, hz = (double)sysconf(_SC_CLK_TCK), cores = std::max(1, juce::SystemStats::getNumCpus());
         if (lastT > 0 && now > lastT) cpu = juce::jlimit(0.0, 100.0, (ticks - lastTicks) / hz / (now - lastT) / cores * 100);
         lastT = now; lastTicks = ticks; ramMB = rss * (double)sysconf(_SC_PAGESIZE) / 1048576.0;
+#elif JUCE_WINDOWS
+        // the app and the processes it started (the VST hosts): CPU time in 100 ns units, working set in bytes
+        const DWORD me = GetCurrentProcessId(); std::map<DWORD, DWORD> parent;
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap != INVALID_HANDLE_VALUE) { PROCESSENTRY32W e{}; e.dwSize = sizeof e; for (BOOL ok = Process32FirstW(snap, &e); ok; ok = Process32NextW(snap, &e)) parent[e.th32ProcessID] = e.th32ParentProcessID; CloseHandle(snap); }
+        std::set<DWORD> tree{ me }; bool grew = true; while (grew) { grew = false; for (auto& [pid, pp] : parent) if (pid != pp && tree.count(pp) && tree.insert(pid).second) grew = true; }
+        long long ticks = 0; double bytes = 0;
+        for (DWORD pid : tree) {
+            HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid); if (!h) continue;
+            FILETIME c, x, k, u; if (GetProcessTimes(h, &c, &x, &k, &u)) ticks += (long long)(((ULONGLONG)k.dwHighDateTime << 32 | k.dwLowDateTime) + ((ULONGLONG)u.dwHighDateTime << 32 | u.dwLowDateTime));
+            PROCESS_MEMORY_COUNTERS pm{}; if (GetProcessMemoryInfo(h, &pm, sizeof pm)) bytes += (double)pm.WorkingSetSize;
+            CloseHandle(h);
+        }
+        const double now = juce::Time::getMillisecondCounterHiRes() / 1000.0, cores = std::max(1, juce::SystemStats::getNumCpus());
+        if (lastT > 0 && now > lastT) cpu = juce::jlimit(0.0, 100.0, (ticks - lastTicks) / 1e7 / (now - lastT) / cores * 100);
+        lastT = now; lastTicks = ticks; ramMB = bytes / 1048576.0;
 #endif
     }
 };

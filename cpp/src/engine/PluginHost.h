@@ -5,7 +5,9 @@
 // its host process down, not the app.
 #pragma once
 #include <atomic>
+#include <cmath>
 #include <condition_variable>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <map>
@@ -37,7 +39,11 @@ public:
     juce::File binDir() const { return bin; }
     static juce::File findBinDir();   // native/bin next to the app (packaged) or up from the build folder (development)
 private:
+#if defined(_WIN32)
+    struct Proc { void* proc = nullptr; void* in = nullptr; HostEndpoint ep; };   // process HANDLE, write end of its stdin
+#else
     struct Proc { int pid = -1, in = -1; HostEndpoint ep; };
+#endif
     mutable std::mutex m; Proc clapP, win64, win32; bool remoteOn = false; HostEndpoint rClap, rWin64, rWin32; std::atomic<int> pending{ 0 }; juce::File bin; bool started = false;
     static Proc spawn(const std::string& exe, const std::vector<std::string>& args, const std::vector<std::pair<std::string, std::string>>& env, double timeoutSec);
 };
@@ -67,7 +73,7 @@ public:
     std::vector<Event> takeEvents();
     double lastSent(int id) const { std::lock_guard<std::mutex> l(pm); auto it = sent.find(id); return it == sent.end() ? NAN : it->second; }
 private:
-    int fd = -1; std::thread reader; std::atomic<bool> running{ false }, loaded{ false }; Info inf;
+    std::intptr_t fd = -1; std::thread reader; std::atomic<bool> running{ false }, loaded{ false }; Info inf;
     bool remote = false, primed = false; int underruns = 0;   // remote: blocks are pipelined through a small buffer instead of awaited
     std::mutex wm;                             // writes
     std::mutex am; std::condition_variable acv; std::deque<std::vector<float>> replies;   // audio answers

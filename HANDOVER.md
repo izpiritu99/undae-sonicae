@@ -683,6 +683,28 @@ Keep the Linux and Android paths as they are, since they cannot be tested on Win
 - Plug-ins: `undae-plugtest` once the hosts run, then a real VST3 instrument and effect in the app (editor window open,
   automation, save and reload).
 
+### Windows status (2026-11-17, branch `windows`)
+
+Built on Windows 11 with VS 2022 Build Tools (MSVC 19.44): `cpp\build-win.bat` sets up the MSVC environment, puts VS's
+own CMake and Ninja ahead of any MinGW copies on PATH, then configures and builds `cpp\build`. All six targets build.
+
+Done:
+- `cpp/CMakeLists.txt`: gcc flags and `-O3` under `if(NOT MSVC)`, `/W3`, `/utf-8`, `_USE_MATH_DEFINES`, `NOMINMAX`;
+  JACK / ALSA on Linux only; `ws2_32` and `psapi` linked on Windows.
+- `PluginHost.cpp`: Winsock shim (`closeSock`, `setTimeout`, `WSAStartup`), `CreateProcessW` spawn with piped
+  stdin/stdout and an environment block, `TerminateProcess` stop. The VST hosts run directly (no Wine) and scan the
+  standard VST folders, passed one per line in `HostEndpoint::folder` (scanPlugins splits it). `findBinDir` looks for
+  `undae-vsthost.exe` on Windows and stops at the drive root. Every VST3 counts as a Windows slot there.
+- `Mp3.cpp`: `LoadLibrary` of `libmp3lame.dll` (next to the exe first).
+- `AppMain.cpp`: CPU / RAM readout through Toolhelp, `GetProcessTimes` and `GetProcessMemoryInfo`.
+- Linux / Android code paths are unchanged (not compiled here: build and self-test on the laptop after merging).
+
+Checked: `undae-selftest` all passed; `undae-render` renders First Light (23.4 s in 1.9 s); the app plays it through
+WASAPI (average callback 0.76 ms of a 10 ms budget) and the `--snapshot` layout matches Linux.
+
+Not done yet: `undae-compare` against a Linux render; `dos_path()` in `native/win/vsthost.c` (item 3, so the hosts
+find no plug-ins yet); the CLAP host (item 4); shipping `libmp3lame.dll`; the installer (item 9).
+
 ### Bringing the work back to Linux
 
 Commit on a branch named `windows`. To carry it back by USB, push that branch to the copy on the stick, for example
