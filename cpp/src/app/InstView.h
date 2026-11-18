@@ -71,7 +71,8 @@ private:
     std::function<void()> done() { return [this] { doc.commit(); }; }
     template <class F> std::function<void(double)> live(F set) { return [this, set](double v) { set(v); doc.live(); }; }
     using Opts = std::vector<std::pair<juce::String, juce::String>>;
-    static Opts waves() { return { { "sine", "Sine" }, { "triangle", "Triangle" }, { "sawtooth", "Saw" }, { "square", "Square" }, { "pulse25", "Pulse 25%" }, { "pulse10", "Pulse 10%" }, { "softsaw", "Soft saw" }, { "organ", "Organ" }, { "bell", "Bell" }, { "vocal", "Vocal" }, { "metal", "Metal" }, { "stair", "Stair" } }; }
+    static Opts waves() { Opts o = { { "sine", "Sine" }, { "triangle", "Triangle" }, { "sawtooth", "Saw" }, { "square", "Square" }, { "pulse25", "Pulse 25%" }, { "pulse10", "Pulse 10%" }, { "softsaw", "Soft saw" }, { "organ", "Organ" }, { "bell", "Bell" }, { "vocal", "Vocal" }, { "metal", "Metal" }, { "stair", "Stair" } };
+        for (auto& w : us::waveSets()) o.push_back({ w.id, juce::String("Table: ") + w.label }); return o; }   // a table: Morph scans its frames
 
     void header() {
         auto* c = ch(); hasHead = c != nullptr; for (juce::Component* x : std::initializer_list<juce::Component*>{ &dot, &nameB, &tag, &busL, &busBox, &vol, &pan, &testB }) x->setVisible(hasHead); if (!c) return;
@@ -147,10 +148,18 @@ private:
         G.note(u8("Four performance knobs. Pick “Macro 1-4” as a source in the matrix and one knob can sweep several things at once."));
         for (int i = 0; i < 3; i++) {
             G.card(juce::String("Oscillator ") + "ABC"[i], s.osc[i].on, [this, S, i](bool b) { S().osc[i].on = b; doc.commit(); });
-            auto* g = G.gfx([S, i](juce::Graphics& gr, juce::Rectangle<float> r) { auto a = waveShape(S().osc[i].wave), b = waveShape(S().osc[i].wave2); const float m = (float)S().osc[i].morph; for (size_t k = 0; k < a.size(); k++) a[k] = a[k] * (1 - m) + b[k] * m; Gfx::plot(gr, r, a); });
+            auto* g = G.gfx([S, i](juce::Graphics& gr, juce::Rectangle<float> r) {
+                const auto& O = S().osc[i]; const float m = (float)O.morph;
+                if (us::isWaveSet(O.wave)) {   // the frame at the current position, from the engine's own tables
+                    const double x = m * (us::WT_FRAMES - 1); const int k0 = std::min(us::WT_FRAMES - 2, (int)x); const double fx = x - k0;
+                    const auto& A = us::WaveTable::get(us::frameName(O.wave, k0)); const auto& B = us::WaveTable::get(us::frameName(O.wave, k0 + 1));
+                    std::vector<float> a(96); for (size_t k = 0; k < a.size(); k++) { const double p = (double)k / a.size(); a[k] = (float)(A.read(p, 20, 48000) * (1 - fx) + B.read(p, 20, 48000) * fx); }
+                    Gfx::plot(gr, r, a); return;
+                }
+                auto a = waveShape(O.wave), b = waveShape(O.wave2); for (size_t k = 0; k < a.size(); k++) a[k] = a[k] * (1 - m) + b[k] * m; Gfx::plot(gr, r, a); });
             G.pick("Wave", waves(), juce::String(s.osc[i].wave), [this, S, i, g](const juce::String& v) { S().osc[i].wave = v.toStdString(); g->repaint(); doc.commit(); }, 96);
             G.pick("Morph to", waves(), juce::String(s.osc[i].wave2), [this, S, i, g](const juce::String& v) { S().osc[i].wave2 = v.toStdString(); g->repaint(); doc.commit(); }, 96);
-            G.knob("Morph", 0, 1, 0, s.osc[i].morph, [this, S, i, g](double v) { S().osc[i].morph = v; g->repaint(); doc.live(); }, done(), false, pct);
+            G.knob(us::isWaveSet(s.osc[i].wave) ? "Position" : "Morph", 0, 1, 0, s.osc[i].morph, [this, S, i, g](double v) { S().osc[i].morph = v; g->repaint(); doc.live(); }, done(), false, pct);
             G.knob("Octave", -3, 3, 0, s.osc[i].oct, live([S, i](double v) { S().osc[i].oct = std::round(v); }), done(), false, {}, 1);
             G.knob("Semi", -12, 12, 0, s.osc[i].semi, live([S, i](double v) { S().osc[i].semi = std::round(v); }), done(), false, {}, 1);
             G.knob("Fine", -100, 100, 0, s.osc[i].fine, live([S, i](double v) { S().osc[i].fine = std::round(v); }), done(), false, [](double v) { return juce::String(juce::roundToInt(v)) + "c"; }, 1);

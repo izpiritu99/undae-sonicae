@@ -20,7 +20,7 @@ int srcOf(const std::string& s) {
 
 struct Osc { const WaveTable* w; double ratio, det; double ph = 0; int side = 0; double detF = 1; };   // detF: 2^(det/1200), fixed per note   // side: 0 centre, -1 left, +1 right
 struct Bank { std::vector<Osc> osc; bool stereo = false; };
-struct Layer { bool on = false; Bank a, b; bool morph = false; double level = 0, mo = 0, pan = 0; bool stereo = false; };
+struct Layer { bool on = false; Bank a, b; bool morph = false; double level = 0, mo = 0, pan = 0; bool stereo = false; const WaveTable* fr[WT_FRAMES] = {}; bool wt = false; };
 enum LfoW { W_SINE, W_TRI, W_SAW, W_SAWDOWN, W_SQUARE, W_SH, W_RAND };
 struct Lfo { int wave = W_SINE; double rate = 1, fade = 0, ph = 0; double rnd[64]; bool used = false; };
 
@@ -32,7 +32,7 @@ public:
         for (auto& m : P.mod) { if (m.src == "none" || m.dst == "none" || m.amt == 0) continue; int d = dstOf(m.dst), s = srcOf(m.src); if (d < 0 || s < 0) continue; mods.push_back({ s, d, m.amt }); usesD[d] = true; usesS[s] = true; }
         uni = std::clamp(P.uni, 1, 9);
         if (o.glideFrom >= 0 && P.glide > 0.001 && o.glideFrom != n) glide = mtof(o.glideFrom) / f;
-        auto mkOsc = [&](const std::string& wave, double ratio, double det, int side) { Osc x{ &WaveTable::get(wave), ratio, det + (P.drift ? r.bi() * P.drift : 0.0) }; x.side = side; x.detF = std::exp2(x.det / 1200); return x; };
+        auto mkOsc = [&](const std::string& wave, double ratio, double det, int side) { Osc x{ &WaveTable::get(isWaveSet(wave) ? frameName(wave, 0) : wave), ratio, det + (P.drift ? r.bi() * P.drift : 0.0) }; x.side = side; x.detF = std::exp2(x.det / 1200); return x; };
         auto ratioOf = [](const OscP& O) { return std::pow(2.0, O.oct + O.semi / 12.0); };
         for (int i = 0; i < 3; i++) {
             const OscP& O = P.osc[i]; Layer& L = layers[i];
@@ -43,7 +43,8 @@ public:
                 for (int u = 0; u < uni; u++) b.osc.push_back(mkOsc(wave, ratioOf(O), O.fine + (uni > 1 ? ((double)u / (uni - 1) * 2 - 1) * P.detune : 0), b.stereo ? (u % 2 ? 1 : -1) : 0));
             };
             L.mo = O.morph;
-            if (L.mo > 0.001 || usesD[D_MORPH]) { L.morph = true; bank(O.wave, L.a); bank(O.wave2.empty() ? "sine" : O.wave2, L.b); }
+            if (isWaveSet(O.wave)) { L.wt = true; for (int k = 0; k < WT_FRAMES; k++) L.fr[k] = &WaveTable::get(frameName(O.wave, k)); bank(O.wave, L.a); }   // Morph scans the frames
+            else if (L.mo > 0.001 || usesD[D_MORPH]) { L.morph = true; bank(O.wave, L.a); bank(O.wave2.empty() ? "sine" : O.wave2, L.b); }
             else bank(O.wave, L.a);
             L.stereo = L.a.stereo || L.pan != 0;
             if (L.stereo) stereoMix = true;
@@ -115,7 +116,8 @@ public:
                 Layer& Ly = layers[k]; if (!Ly.on) continue;
                 const double lv = Ly.level + md[D_OSCA + k];
                 double aM = 0, aL = 0, aR = 0, bM = 0, bL = 0, bR = 0;
-                runBank(Ly.a, base, pf, k == 0 ? fmHz : 0, sr, aM, aL, aR);
+                if (Ly.wt) runTable(Ly, clampd(Ly.mo + md[D_MORPH], 0, 1), base, pf, k == 0 ? fmHz : 0, sr, aM, aL, aR);
+                else runBank(Ly.a, base, pf, k == 0 ? fmHz : 0, sr, aM, aL, aR);
                 double ga = 1, gb = 0;
                 if (Ly.morph) { runBank(Ly.b, base, pf, k == 0 ? fmHz : 0, sr, bM, bL, bR); ga = 1 - Ly.mo - md[D_MORPH]; gb = Ly.mo + md[D_MORPH]; }
                 double sM = (aM * ga + bM * gb) * lv, sL = (aL * ga + bL * gb) * lv, sR = (aR * ga + bR * gb) * lv;
@@ -158,6 +160,16 @@ private:
 
     static double wrap(double p) { return p - std::floor(p); }
     double ampAt(double tl) const { if (killAt >= 0 && tl >= killAt) return killFrom * std::exp(-(tl - killAt) / 0.006); return amp.at(tl); }
+    void runTable(Layer& Ly, double pos, double base, double pf, double fmHz, double sr, double& M, double& Lo, double& Ro) {   // two neighbouring frames, crossfaded
+        const double x = pos * (WT_FRAMES - 1); const int k0 = std::min(WT_FRAMES - 2, (int)x); const double fx = x - k0;
+        Bank& b = Ly.a;
+        for (auto& o : b.osc) {
+            const double fr = (base * o.ratio + fmHz) * o.detF * pf, af = std::abs(fr);
+            const double v = Ly.fr[k0]->read(o.ph, af, sr) * (1 - fx) + Ly.fr[k0 + 1]->read(o.ph, af, sr) * fx; o.ph = wrap(o.ph + fr / sr);
+            if (!b.stereo) M += v;
+            else { float l, r; panMono((float)v, o.side * P.spread, l, r); Lo += l; Ro += r; }
+        }
+    }
     void runBank(Bank& b, double base, double pf, double fmHz, double sr, double& M, double& Lo, double& Ro) {
         for (auto& x : b.osc) {
             const double fr = (base * x.ratio + fmHz) * x.detF * pf;

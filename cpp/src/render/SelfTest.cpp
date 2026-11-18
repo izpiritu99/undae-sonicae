@@ -6,6 +6,8 @@
 #include "engine/Analysis.h"
 #include "engine/SoundDesign.h"
 #include "engine/Effects.h"
+#include "engine/Voices.h"
+#include "app/Presets.h"
 
 static int fails = 0;
 static void check(bool ok, const std::string& what) { std::cout << (ok ? "PASS  " : "FAIL  ") << what << "\n"; if (!ok) fails++; }
@@ -335,6 +337,21 @@ int main(int argc, char** argv) {
             check(image > 0.05 && snr > 20 && snr < 32 && cpk > 0.01f && c1 == c2 && cut10k < -30 && std::abs(pass1k) < 1,
                   "lo-fi: 8 kHz sample and hold leaves a 7 kHz image (" + std::to_string(image) + "), 4 bits leaves the signal " + std::to_string(snr) + " dB above its quantising noise (about 26), crackle peaks "
                   + std::to_string(cpk) + " on silence the same every run, the 3 kHz high cut takes 10 kHz down " + std::to_string(-cut10k) + " dB");
+        }
+        // instruments: the synth's wavetable mode (Morph scans the frames)
+        {
+            auto renderNote = [&](const us::SynthP& P, int note) { us::NoteOpts o; auto v = us::makeSynthVoice(P, note, 1.0, 0, 0.9, o, sr); std::vector<float> L((size_t)N, 0.f), R((size_t)N, 0.f);
+                for (int off = 0; off < N; off += 512) v->render(L.data() + off, R.data() + off, nullptr, std::min(512, N - off), off / sr, sr); return L; };
+            us::SynthP P = ui::defSynth(); P.f1.on = false; P.osc[0].wave = "wt:pulse";
+            P.osc[0].morph = 0; auto sq = renderNote(P, 57); P.osc[0].morph = 1; auto nar = renderNote(P, 57);   // 220 Hz: square, then a 5 % pulse
+            const double evenSq = tone(sq, 440) / tone(sq, 220), evenNar = tone(nar, 440) / tone(nar, 220);
+            P.osc[0].wave = "wt:bright"; P.osc[0].morph = 0; auto dark = renderNote(P, 45); P.osc[0].morph = 1; auto open = renderNote(P, 45);   // 110 Hz
+            const double darkHi = tone(dark, 1100) / tone(dark, 110), openHi = tone(open, 1100) / tone(open, 110);
+            bool presetsOk = true; std::string badP;
+            for (auto& [name, fn] : ui::synthPresets()) { us::SynthP x = ui::defSynth(); fn(x); if (!us::isWaveSet(x.osc[0].wave)) continue; auto y = renderNote(x, 60); float pk = 0; bool fin = true; for (float v : y) { fin &= std::isfinite(v); pk = std::max(pk, std::abs(v)); } if (!fin || pk < 0.01f || pk > 2) { presetsOk = false; badP = name; } }
+            check(evenSq < 0.02 && evenNar > 0.5 && darkHi < 0.01 && openHi > 0.05 && presetsOk,
+                  "synth wavetables: the pulse table at position 0 has no 2nd harmonic (" + std::to_string(evenSq) + "), at 1 a strong one (" + std::to_string(evenNar) + "); the opening table's 10th harmonic goes "
+                  + std::to_string(darkHi) + " -> " + std::to_string(openHi) + "; the wavetable presets play" + (badP.empty() ? "" : " (not " + badP + ")"));
         }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";

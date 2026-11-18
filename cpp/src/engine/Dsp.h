@@ -100,6 +100,14 @@ private:
     std::vector<std::array<float, SIZE>> tables; std::vector<int> harm;
 };
 
+// Wavetables: an oscillator wave named "wt:<id>" scans WT_FRAMES single-cycle frames ("wt:<id>:<k>" in WaveTable::get)
+// with the oscillator's Morph as the position. All frames are generated here from formulas (original designs).
+constexpr int WT_FRAMES = 8;
+struct WaveSet { const char* id; const char* label; };
+const std::vector<WaveSet>& waveSets();
+inline bool isWaveSet(const std::string& w) { return w.size() > 3 && w.compare(0, 3, "wt:") == 0; }
+inline std::string frameName(const std::string& set, int k) { return set + ":" + std::to_string(k); }
+
 // --- AudioParam timeline (setValueAtTime, linear / exponential ramps, setTargetAtTime) ---------------------------------
 // Used where the JavaScript schedules envelopes as automation events: the drum kit, the keys sound, sweeps.
 class Timeline {

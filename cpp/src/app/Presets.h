@@ -27,6 +27,17 @@ inline const std::vector<std::pair<const char*, std::function<void(us::SynthP&)>
         { "Glass Keys", [=](S& s) { s.osc[0].wave = "bell"; s.osc[1] = osc(true, "sine", 1, 0, 3, 0.3); s.f1.on = false; s.aenv = { 0.002, 1.4, 0, 0.9 }; s.vel = 0.8; mod(s, 0, "vel", "oscB", 0.4); } },
         { "S&H Bleeps", [=](S& s) { s.osc[0].wave = "pulse25"; s.f1.type = "bandpass"; s.f1.cutoff = 1200; s.f1.q = 3.5; s.gain = 1.4; s.aenv = { 0.003, 0.2, 0.6, 0.15 }; s.lfo[2] = { "sh", 8, 0.25, 0 }; mod(s, 0, "lfo3", "cutoff", 0.55); mod(s, 1, "lfo3", "pan", 0.5); } },
         { "Ring Metal", [=](S& s) { s.osc[0].wave = "sine"; s.osc[0].level = 0.3; s.osc[1] = osc(false, "sine", 1, 6, 0, 0.5); s.ring = 0.8; s.f1.cutoff = 7000; s.aenv = { 0.002, 0.9, 0.1, 0.7 }; s.menv = { 0.002, 0.6, 0, 0.4 }; mod(s, 0, "menv", "ring", 0.4); } },
+        // wavetable patches (original): the position moves with an LFO, an envelope or the mod wheel
+        { "Vowel Pad", [=](S& s) { s.osc[0].wave = "wt:formant"; s.osc[0].morph = 0.3; s.uni = 3; s.detune = 10; s.spread = 0.8; s.f1.cutoff = 5000; s.aenv = { 0.35, 0.6, 0.8, 1.2 };
+            s.lfo[1].rate = 0.25; mod(s, 0, "lfo2", "morph", 0.35); mod(s, 1, "wheel", "morph", 0.4); } },
+        { "Sync Lead", [=](S& s) { s.osc[0].wave = "wt:sync"; s.osc[0].morph = 0.1; s.mode = "mono"; s.glide = 0.05; s.f1.cutoff = 7000; s.aenv = { 0.005, 0.2, 0.8, 0.25 };
+            s.menv = { 0.002, 0.45, 0.15, 0.3 }; mod(s, 0, "menv", "morph", 0.75); mod(s, 1, "lfo1", "pitch", 0.006); } },
+        { "Fold Bass", [=](S& s) { s.osc[0].wave = "wt:fold"; s.osc[0].morph = 0.05; s.mode = "mono"; s.sub = 0.5; s.f1.cutoff = 3000; s.aenv = { 0.003, 0.3, 0.7, 0.15 };
+            s.menv = { 0.001, 0.25, 0.1, 0.2 }; mod(s, 0, "menv", "morph", 0.5); mod(s, 1, "vel", "morph", 0.3); } },
+        { "Glass Keys", [=](S& s) { s.osc[0].wave = "wt:glass"; s.osc[0].morph = 0.6; s.osc[1] = osc(true, "sine", 1, 0, 3, 0.25); s.f1.cutoff = 9000; s.aenv = { 0.003, 1.2, 0.2, 0.8 };
+            s.menv = { 0.001, 0.9, 0, 0.5 }; mod(s, 0, "menv", "morph", -0.4); } },
+        { "PWM Strings", [=](S& s) { s.osc[0].wave = "wt:pulse"; s.osc[0].morph = 0.4; s.uni = 4; s.detune = 16; s.spread = 0.9; s.f1.cutoff = 3500; s.aenv = { 0.4, 0.5, 0.85, 0.9 };
+            s.lfo[0].rate = 0.6; mod(s, 0, "lfo1", "morph", 0.3); } },
     };
     return list;
 }

@@ -948,6 +948,14 @@ All fifteen effect gaps from the list are now filled: 19 new built-in effect typ
 Next: the instruments (wavetable mode for the synth, granular sampler, multi-sample instrument, plucked string /
 modal models, arpeggiator / step sequencer, original preset banks).
 
+- **Wavetable mode for the synth** (self-test 40 / 40): seven original tables of 8 frames each, generated from formulas
+  in `Dsp.cpp` (`waveSets()`, frames "wt:<id>:<k>", built at start-up in `WaveTable::warmUp`, about 0.16 s): Saw to
+  square, Opening (low-pass sweep), Pulse width, Vowel (moving formant), Sync (hard-sync series), Fold (wave folding),
+  Glass (sparse partials). Picking "Table: ..." as an oscillator's wave turns Morph into Position, which the mod
+  matrix's "morph" destination moves; the panel preview draws the current frame. Five original presets use them:
+  Vowel Pad, Sync Lead, Fold Bass, Glass Keys, PWM Strings. Checks: the pulse table has no 2nd harmonic at position 0
+  and a strong one at 1; the opening table's 10th harmonic rises from -83 to -21 dB; every wavetable preset plays.
+
 ## Linux catch-up list (for later; work is Windows-only for now)
 
 The owner is working on Windows only for now (Android work is fine from Windows: the SDK, Android Studio, the emulator
@@ -962,14 +970,15 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (39 after lo-fi; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (40 after the wavetables; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
 4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
-   `autopan`, `lofi`). Until then, do not open projects that use them in the Electron app.
+   `autopan`, `lofi`). The synth's "wt:" wave names and the five wavetable presets also need porting to
+   `synth.js` (unknown waves there fall back to sine). Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).

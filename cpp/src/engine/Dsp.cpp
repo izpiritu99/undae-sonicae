@@ -1,4 +1,5 @@
 #include "Dsp.h"
+#include <juce_dsp/juce_dsp.h>
 #include <map>
 #include <mutex>
 
@@ -94,7 +95,33 @@ std::vector<float> shapeCurve(const std::string& type, double amt) {
 }
 
 // --- wave tables ---------------------------------------------------------------------------------------------------
+const std::vector<WaveSet>& waveSets() {
+    static const std::vector<WaveSet> v = { { "wt:sweep", "Saw to square" }, { "wt:bright", "Opening" }, { "wt:pulse", "Pulse width" }, { "wt:formant", "Vowel" },
+                                            { "wt:sync", "Sync" }, { "wt:fold", "Fold" }, { "wt:glass", "Glass" } };
+    return v;
+}
+// One frame of a wavetable: harmonic amplitudes from a formula, or the Fourier series of a time-domain cycle.
+static bool frameCoefs(const std::string& name, std::vector<double>& re, std::vector<double>& im) {
+    const size_t c = name.rfind(':'); if (c == std::string::npos || c < 4) return false;
+    const std::string set = name.substr(0, c); const int k = std::atoi(name.c_str() + c + 1); const double t = (double)k / (WT_FRAMES - 1);
+    const int N = 256; re.assign(N + 1, 0); im.assign(N + 1, 0);
+    auto fromCycle = [&](auto fn) {   // FFT of a 4096-point cycle, the first N harmonics
+        const int M = 4096; juce::dsp::FFT fft(12); std::vector<float> x(2 * M, 0.f); for (int i = 0; i < M; i++) x[(size_t)i] = (float)fn((double)i / M);
+        fft.performRealOnlyForwardTransform(x.data(), true);
+        for (int n = 1; n <= N; n++) { re[n] = 2.0 * x[(size_t)(2 * n)] / M; im[n] = -2.0 * x[(size_t)(2 * n + 1)] / M; }
+    };
+    if (set == "wt:sweep") for (int n = 1; n <= N; n++) im[n] = (n % 2 ? 1 : 1 - t) / n;
+    else if (set == "wt:bright") for (int n = 1; n <= N; n++) im[n] = std::exp(-(n - 1) / (0.6 + t * t * 60)) / n;
+    else if (set == "wt:pulse") { const double d = 0.5 - t * 0.45; for (int n = 1; n <= N; n++) { re[n] = 2 * std::sin(2 * PI * n * d) / (PI * n); im[n] = 2 * (1 - std::cos(2 * PI * n * d)) / (PI * n); } }
+    else if (set == "wt:formant") { const double cc = 2 + t * 16; for (int n = 1; n <= N; n++) im[n] = std::exp(-(n - cc) * (n - cc) / 9.7) + 0.6 * std::exp(-(n - 2.6 * cc) * (n - 2.6 * cc) / 30) * 0.5 + 0.25 / n; }
+    else if (set == "wt:sync") { const double r = 1 + t * 5; fromCycle([&](double p) { const double q = p * r; return 2 * (q - std::floor(q)) - 1; }); }
+    else if (set == "wt:fold") { const double g = 1 + t * 6; fromCycle([&](double p) { return std::asin(std::sin(g * std::sin(2 * PI * p) * PI / 2)) * 2 / PI; }); }
+    else if (set == "wt:glass") { static const int part[] = { 1, 2, 3, 5, 8, 13, 21, 34 }; for (int j = 0; j < 8; j++) { const double c2 = t * 7; im[part[j]] = std::exp(-std::abs(j - c2) * 0.9) / (1 + j * 0.15); } }
+    else return false;
+    return true;
+}
 static void coefsFor(const std::string& name, std::vector<double>& re, std::vector<double>& im) {
+    if (isWaveSet(name) && frameCoefs(name, re, im)) return;
     const int N = name == "sine" || name == "triangle" || name == "sawtooth" || name == "square" ? 1024 : 64;
     re.assign(N + 1, 0); im.assign(N + 1, 0);
     for (int n = 1; n <= N; n++) {
@@ -134,6 +161,7 @@ WaveTable::WaveTable(const std::vector<double>& re, const std::vector<double>& i
 
 void WaveTable::warmUp() {
     for (const char* w : { "sine", "triangle", "sawtooth", "square", "pulse25", "pulse10", "softsaw", "organ", "bell", "vocal", "metal", "stair" }) get(w);
+    for (auto& ws : waveSets()) for (int k = 0; k < WT_FRAMES; k++) get(frameName(ws.id, k));
 }
 const WaveTable& WaveTable::get(const std::string& name) {
     static std::mutex m; static std::map<std::string, std::unique_ptr<WaveTable>> cache;
