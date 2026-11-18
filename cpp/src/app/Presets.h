@@ -38,6 +38,14 @@ inline const std::vector<std::pair<const char*, std::function<void(us::SynthP&)>
             s.menv = { 0.001, 0.9, 0, 0.5 }; mod(s, 0, "menv", "morph", -0.4); } },
         { "PWM Strings", [=](S& s) { s.osc[0].wave = "wt:pulse"; s.osc[0].morph = 0.4; s.uni = 4; s.detune = 16; s.spread = 0.9; s.f1.cutoff = 3500; s.aenv = { 0.4, 0.5, 0.85, 0.9 };
             s.lfo[0].rate = 0.6; mod(s, 0, "lfo1", "morph", 0.3); } },
+        // physical-model patches (original)
+        { "Nylon Pluck", [=](S& s) { s.osc[0].on = false; s.pm = { "pluck", "bar", 2.5, 0.45, 0.18, 0.4, 0.9 }; s.f1.cutoff = 9000; s.aenv = { 0.002, 3, 1, 0.4 }; } },
+        { "Steel Pluck", [=](S& s) { s.osc[0].on = false; s.pm = { "pluck", "bar", 4, 0.85, 0.12, 0.8, 0.85 }; s.f1.cutoff = 14000; s.aenv = { 0.002, 4, 1, 0.6 }; } },
+        { "Pluck Bass", [=](S& s) { s.osc[0].on = false; s.pm = { "pluck", "bar", 1.2, 0.3, 0.3, 0.6, 1 }; s.sub = 0.25; s.mode = "mono"; s.f1.cutoff = 2500; s.aenv = { 0.002, 1.5, 1, 0.12 }; } },
+        { "Vibes", [=](S& s) { s.osc[0].on = false; s.pm = { "mallet", "bar", 3, 0.5, 0.2, 0.45, 0.9 }; s.f1.cutoff = 12000; s.aenv = { 0.002, 3, 1, 1 }; s.lfo[0].rate = 5; mod(s, 0, "lfo1", "amp", 0.25); } },
+        { "Glass Mallet", [=](S& s) { s.osc[0].on = false; s.pm = { "mallet", "glass", 2.2, 0.75, 0.2, 0.7, 0.85 }; s.f1.cutoff = 15000; s.aenv = { 0.002, 2.5, 1, 1.2 }; } },
+        { "Wood Block", [=](S& s) { s.osc[0].on = false; s.pm = { "mallet", "wood", 1, 0.6, 0.2, 0.85, 1 }; s.f1.cutoff = 12000; s.aenv = { 0.001, 0.5, 1, 0.2 }; } },
+        { "Tower Bell", [=](S& s) { s.osc[0].on = false; s.pm = { "mallet", "bell", 6, 0.7, 0.2, 0.75, 0.8 }; s.f1.cutoff = 16000; s.aenv = { 0.002, 6, 1, 3 }; } },
     };
     return list;
 }

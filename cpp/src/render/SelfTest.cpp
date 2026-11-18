@@ -395,6 +395,22 @@ int main(int argc, char** argv) {
                   "zones: C4 plays from the low zone (" + std::to_string(c4) + "), E5 from the high zone (" + std::to_string(e5) + "), nothing crosses (" + std::to_string(wrong) + "); two overlapping zones take turns ("
                   + std::to_string(rrDiff) + " dB apart, 12 set)");
         }
+        // physical models: the plucked string is in tune and dies away at the set rate; the struck bar rings at its mode ratios
+        {
+            auto renderNote = [&](const us::SynthP& P, int note) { us::NoteOpts o; auto v = us::makeSynthVoice(P, note, 1.0, 0, 0.95, o, sr); std::vector<float> L((size_t)N, 0.f), R((size_t)N, 0.f);
+                for (int off = 0; off < N; off += 512) v->render(L.data() + off, R.data() + off, nullptr, std::min(512, N - off), off / sr, sr); return L; };
+            auto rmsWin = [&](const std::vector<float>& v, double a, double b) { double s2 = 0; for (int i = (int)(a * sr); i < (int)(b * sr); i++) s2 += (double)v[(size_t)i] * v[(size_t)i]; return 10 * std::log10(s2 / ((b - a) * sr) + 1e-30); };
+            us::SynthP P = ui::defSynth(); P.osc[0].on = false; P.f1.on = false; P.aenv = { 0.001, 3, 1, 0.3 };
+            P.pm = { "pluck", "bar", 2, 0.5, 0.2, 0.5, 0.9 }; auto pl = renderNote(P, 57);
+            const double pp = us::pitchOf(std::vector<float>(pl.begin() + 4800, pl.begin() + 4800 + 4096), sr), drop = rmsWin(pl, 0.1, 0.2) - rmsWin(pl, 0.6, 0.7);
+            P.pm.type = "mallet"; P.pm.mat = "bar"; auto ml = renderNote(P, 69);
+            const double m1 = tone(ml, 440), m2 = tone(ml, 440 * 2.756), off = tone(ml, 1000);
+            bool presetsOk = true; std::string badP;
+            for (auto& [name, fn] : ui::synthPresets()) { us::SynthP x = ui::defSynth(); fn(x); if (x.pm.type == "off") continue; auto y = renderNote(x, 60); float pk = 0; bool fin = true; for (float v : y) { fin &= std::isfinite(v); pk = std::max(pk, std::abs(v)); } if (!fin || pk < 0.005f || pk > 2) { presetsOk = false; badP = name; } }
+            check(std::abs(pp - 57) < 0.1 && drop > 8 && drop < 25 && m1 > 0.001 && m2 > 5 * off && presetsOk,
+                  "physical models: the plucked string plays note " + std::to_string(pp) + " (57) and falls " + std::to_string(drop) + " dB in 0.5 s (2 s decay: 15 in theory); the struck bar rings at 1 and 2.756 x ("
+                  + std::to_string(20 * std::log10(m2 / std::max(1e-9, off))) + " dB over the gap); the model presets play" + (badP.empty() ? "" : " (not " + badP + ")"));
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

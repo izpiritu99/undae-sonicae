@@ -20,12 +20,16 @@ struct OscP { bool on = true; std::string wave = "sawtooth", wave2 = "square"; d
 struct FilterP { bool on = true; std::string type = "lowpass"; double cutoff = 6000, q = 1, env = 0, key = 0, drive = 0; };
 struct LfoP { std::string wave = "sine"; double rate = 5, sync = 0, fade = 0; };
 struct ModP { std::string src = "none", dst = "none"; double amt = 0; };
+// Physical model voice source, beside the oscillators: "pluck" (Karplus-Strong string: a noise burst circulating in a
+// tuned delay with a damping filter) or "mallet" (struck modal resonators of a bar, glass, wood or bell).
+struct ModelP { std::string type = "off", mat = "bar"; double decay = 2, bright = 0.6, pos = 0.2, hard = 0.5, level = 0.8; };
 struct SynthP {
     OscP osc[3];
     int uni = 1; double detune = 14, spread = 0.5, drift = 0, sub = 0; std::string subWave = "sine"; double subOct = -1, noise = 0, noiseTone = 1, fm = 0, ring = 0;
     FilterP f1, f2; std::string froute = "serial"; std::string shaperType = "off"; double shaperAmt = 0.3;
     EnvP aenv, fenv{ 0.005, 0.3, 0.2, 0.3 }, menv{ 0.01, 0.4, 0, 0.3 }, menv2{ 0.3, 1, 0.5, 0.5 };
     LfoP lfo[3]; std::vector<ModP> mod; double macro[4] = { 0, 0, 0, 0 };
+    ModelP pm;
     std::string mode = "poly"; double glide = 0; int voices = 8; double vel = 0.6, gain = 0.7, bendRange = 2;
 };
 

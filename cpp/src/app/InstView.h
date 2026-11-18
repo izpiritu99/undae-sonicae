@@ -234,6 +234,15 @@ private:
         G.pick("Sub octave", { { "-1", u8("−1") }, { "-2", u8("−2") } }, juce::String((int)s.subOct), [this, S](const juce::String& v) { S().subOct = v.getIntValue(); doc.commit(); }, 70);
         G.knob("Noise", 0, 1, 0, s.noise, live([S](double v) { S().noise = v; }), done(), false, pct);
         G.knob("Noise tone", 0, 1, 1, s.noiseTone, live([S](double v) { S().noiseTone = v; }), done(), false, [](double v) { return juce::String(v > 0.97 ? "white" : v > 0.6 ? "pink-ish" : "dark"); });
+        G.card("Physical model");
+        G.pick("Model", { { "off", "Off" }, { "pluck", "Plucked string" }, { "mallet", "Struck (mallet)" } }, juce::String(s.pm.type), [this, S](const juce::String& v) { S().pm.type = v.toStdString(); doc.commit(); }, 130);
+        G.pick("Material", { { "bar", "Metal bar" }, { "glass", "Glass" }, { "wood", "Wood" }, { "bell", "Bell" } }, juce::String(s.pm.mat), [this, S](const juce::String& v) { S().pm.mat = v.toStdString(); doc.commit(); }, 110);
+        G.knob("Decay", 0.05, 12, 2, s.pm.decay, live([S](double v) { S().pm.decay = v; }), done(), true, secs);
+        G.knob("Bright", 0, 1, 0.6, s.pm.bright, live([S](double v) { S().pm.bright = v; }), done(), false, pct);
+        G.knob("Pluck pos", 0.02, 0.5, 0.2, s.pm.pos, live([S](double v) { S().pm.pos = v; }), done(), false, pct);
+        G.knob("Hardness", 0, 1, 0.5, s.pm.hard, live([S](double v) { S().pm.hard = v; }), done(), false, pct);
+        G.knob("Level", 0, 1, 0.8, s.pm.level, live([S](double v) { S().pm.level = v; }), done(), false, pct);
+        G.note("A plucked string (Material is for the mallet) or a struck bar, glass, wood block or bell, played beside the oscillators and through the filters. Turn the oscillators off to hear it alone.");
         const Opts ftypes = { { "lowpass", "Low-pass 12" }, { "lowpass24", "Low-pass 24" }, { "highpass", "High-pass 12" }, { "highpass24", "High-pass 24" }, { "bandpass", "Band-pass" }, { "notch", "Notch" }, { "peaking", "Peak" }, { "allpass", "Phaser (all-pass)" } };
         for (int k = 0; k < 2; k++) {
             auto F = [S, k]() -> us::FilterP& { return k ? S().f2 : S().f1; };

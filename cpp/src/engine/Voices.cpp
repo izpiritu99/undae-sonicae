@@ -53,6 +53,7 @@ public:
         if (P.ring > 0.001 || usesD[D_RING]) { hasRing = true; ringA = mkOsc(P.osc[0].wave, ratioOf(P.osc[0]), P.osc[0].fine, 0); ringB = mkOsc(P.osc[1].wave, ratioOf(P.osc[1]), P.osc[1].fine, 0); }
         if (P.sub > 0.001 || usesD[D_SUB]) { hasSub = true; subOsc = mkOsc(P.subWave.empty() ? "sine" : P.subWave, std::pow(2.0, P.subOct ? P.subOct : -1), 0, 0); }
         if (P.noise > 0.001 || usesD[D_NOISE]) { hasNoise = true; if (P.noiseTone < 0.98) { noiseLp = true; nlp.type = FilterType::Lowpass; nlp.set(sr, 80 * std::pow(250.0, P.noiseTone), 0.5, 0); } }
+        if (P.pm.type == "pluck" || P.pm.type == "mallet") initModel(sr);
         // filters (a "24" type is two cascaded biquads), drive before them, shaper after
         auto mkF = [&](const FilterP& X, Flt& F) {
             if (!X.on) return;
@@ -131,6 +132,7 @@ public:
                 mM += ringA.w->read(ringA.ph, fa, sr) * ringB.w->read(ringB.ph, fb, sr) * (P.ring + md[D_RING]); ringA.ph = wrap(ringA.ph + fa / sr); ringB.ph = wrap(ringB.ph + fb / sr); }
             if (hasSub) { const double fs = base * subOsc.ratio * pf; mM += subOsc.w->read(subOsc.ph, fs, sr) * (P.sub + md[D_SUB]); subOsc.ph = wrap(subOsc.ph + fs / sr); }
             if (hasNoise) { double nz = globalRng().bi(); if (noiseLp) nz = nlp.tick(nz); mM += nz * (P.noise + md[D_NOISE]); }
+            if (mtype) mM += runModel(base * pf, sr) * P.pm.level;
             float l, r;
             if (stereoMix) { l = (float)(mL + mM); r = (float)(mR + mM); } else { l = r = (float)mM; }
             if (hasDrive) { l = drive.apply(l); r = drive.apply(r); }
@@ -157,6 +159,59 @@ private:
     Osc fmOsc{}, ringA{}, ringB{}, subOsc{}; Biquad nlp; Shaper drive, shaper; Flt f1, f2;
     Adsr amp, fenv, menv, menv2; Lfo lfo[3]; Glider bend;
     double killAt = -1, killFrom = 0;
+    // physical model (ModelP): 1 = plucked string, 2 = struck modes
+    int mtype = 0; std::vector<float> sbuf, burst; size_t sw = 0, bk = 0; double sLp = 0, sC = 0.5, sDec = 0.99, mDecay = 2;
+    int nm = 0; double mw[8] = {}, ma1[8] = {}, ma2[8] = {}, mg[8] = {}, my1[8] = {}, my2[8] = {};
+    void initModel(double sr) {
+        Rng& r = globalRng(); const ModelP& M = P.pm; mDecay = std::max(0.05, M.decay);
+        if (M.type == "pluck") {
+            mtype = 1; const double P0 = sr / std::max(20.0, f);
+            sbuf.assign((size_t)(sr / 20) + 8, 0.f); sw = 0;
+            sC = 0.25 + 0.7 * clampd(M.bright, 0, 1);                       // loop low-pass: brighter = less damping per pass
+            Biquad lp; lp.type = FilterType::Lowpass; lp.set(sr, 400 + M.bright * M.bright * 14000 + M.hard * 3000, 0.7, 0);
+            const size_t L = (size_t)std::max(2.0, std::round(P0)); burst.assign(L, 0.f);
+            for (auto& v : burst) v = (float)lp.tick(r.bi());
+            const size_t d = (size_t)std::round(clampd(M.pos, 0.02, 0.5) * L);   // pluck position: a comb on the burst
+            for (size_t i = L; i-- > d;) burst[i] -= burst[i - d];
+            double pk = 0; for (float v : burst) pk = std::max(pk, (double)std::abs(v)); if (pk > 0) for (auto& v : burst) v = (float)(v / pk * 0.8);
+            bk = 0;
+        } else {
+            mtype = 2;
+            static const double bar[] = { 1, 2.756, 5.404, 8.933 }, glass[] = { 1, 2.32, 4.25, 6.63, 9.38 }, wood[] = { 1, 3.99, 8.9 }, bell[] = { 1, 2, 2.4, 3, 4.1, 5.4 };
+            static const double barA[] = { 1, 0.5, 0.3, 0.2 }, glassA[] = { 1, 0.6, 0.4, 0.3, 0.2 }, woodA[] = { 1, 0.3, 0.1 }, bellA[] = { 1, 0.8, 0.6, 0.5, 0.3, 0.2 };
+            const double* rat = bar; const double* amp = barA; int n = 4; double dk = 1;
+            if (M.mat == "glass") { rat = glass; amp = glassA; n = 5; } else if (M.mat == "wood") { rat = wood; amp = woodA; n = 3; dk = 0.2; } else if (M.mat == "bell") { rat = bell; amp = bellA; n = 6; dk = 1.6; }
+            nm = 0;
+            for (int k = 0; k < n; k++) {
+                const double fr = f * rat[k]; if (fr >= sr * 0.45) break;
+                const double T = mDecay * dk / (1 + k * 0.8 * (1 - clampd(M.bright, 0, 1)));
+                const double rr = std::exp(-6.9078 / (std::max(0.01, T) * sr)), w = 2 * PI * fr / sr;
+                mw[nm] = w; ma1[nm] = 2 * rr * std::cos(w); ma2[nm] = rr * rr;
+                mg[nm] = amp[k] * std::pow(clampd(M.hard, 0.05, 1), k * 0.35) * std::sin(w); nm++;
+            }
+            const size_t L = (size_t)std::max(1.0, (1 - clampd(M.hard, 0, 1)) * 0.004 * sr) + 1; burst.assign(L, 0.f);   // a raised-cosine strike, shorter when harder
+            for (size_t i = 0; i < L; i++) burst[i] = (float)((0.5 - 0.5 * std::cos(2 * PI * (i + 0.5) / L)) * 2.0 / L);
+            bk = 0;
+        }
+    }
+    double runModel(double freq, double sr) {
+        const double x = bk < burst.size() ? burst[bk++] : 0.0;
+        if (mtype == 1) {
+            const double Pd = sr / std::max(20.0, freq), lpd = (1 - sC) / sC;    // the loop filter delays by (1-c)/c samples
+            const double d = clampd(Pd - lpd, 2, (double)sbuf.size() - 3);
+            double p = (double)sw - d; while (p < 0) p += (double)sbuf.size();
+            const size_t i0 = (size_t)p % sbuf.size(), i1 = (i0 + 1) % sbuf.size(); const double fr = p - std::floor(p);
+            const double v = sbuf[i0] * (1 - fr) + sbuf[i1] * fr;
+            sLp += sC * (v - sLp);
+            const double g = std::pow(10.0, -3.0 / (mDecay * std::max(20.0, freq)));   // 60 dB down after `decay` seconds
+            const double y = sLp * g + x;
+            sbuf[sw] = (float)y; sw = (sw + 1) % sbuf.size();
+            return y;
+        }
+        double out = 0;
+        for (int k = 0; k < nm; k++) { const double y = ma1[k] * my1[k] - ma2[k] * my2[k] + mg[k] * x; my2[k] = my1[k]; my1[k] = y; out += y; }   // a unit-area strike rings each mode at about its amp
+        return out * 0.35;
+    }
 
     static double wrap(double p) { return p - std::floor(p); }
     double ampAt(double tl) const { if (killAt >= 0 && tl >= killAt) return killFrom * std::exp(-(tl - killAt) / 0.006); return amp.at(tl); }

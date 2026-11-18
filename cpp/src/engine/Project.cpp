@@ -31,6 +31,8 @@ static SynthP synthOf(const juce::var& o) {
     s.uni = (int)num(o, "uni", 1); s.detune = num(o, "detune", 14); s.spread = num(o, "spread", 0.5); s.drift = num(o, "drift", 0);
     s.sub = num(o, "sub", 0); s.subWave = str(o, "subWave", "sine"); s.subOct = num(o, "subOct", -1); s.noise = num(o, "noise", 0); s.noiseTone = num(o, "noiseTone", 1);
     s.fm = num(o, "fm", 0); s.ring = num(o, "ring", 0);
+    if (const juce::var pm = o.getProperty("model", juce::var()); pm.isObject()) { s.pm.type = str(pm, "type", "off"); s.pm.mat = str(pm, "mat", "bar"); s.pm.decay = num(pm, "decay", 2);
+        s.pm.bright = num(pm, "bright", 0.6); s.pm.pos = num(pm, "pos", 0.2); s.pm.hard = num(pm, "hard", 0.5); s.pm.level = num(pm, "level", 0.8); }
     auto filt = [](const juce::var& f, FilterP d) { if (!f.isObject()) { d.on = false; return d; } d.on = flag(f, "on", d.on); d.type = str(f, "type", d.type); d.cutoff = num(f, "cutoff", d.cutoff); d.q = num(f, "q", d.q); d.env = num(f, "env", 0); d.key = num(f, "key", 0); d.drive = num(f, "drive", 0); return d; };
     s.f1 = filt(o.getProperty("filter", juce::var()), FilterP{});
     FilterP f2d; f2d.on = false; f2d.type = "highpass"; f2d.cutoff = 200; s.f2 = filt(o.getProperty("filter2", juce::var()), f2d);
@@ -190,6 +192,8 @@ juce::var synthVar(const SynthP& s, juce::var base) {
     o->setProperty("osc", osc);
     o->setProperty("uni", s.uni); o->setProperty("detune", s.detune); o->setProperty("spread", s.spread); o->setProperty("drift", s.drift); o->setProperty("sub", s.sub);
     o->setProperty("subWave", S(s.subWave)); o->setProperty("subOct", s.subOct); o->setProperty("noise", s.noise); o->setProperty("noiseTone", s.noiseTone); o->setProperty("fm", s.fm); o->setProperty("ring", s.ring);
+    if (s.pm.type != "off" || o->hasProperty("model")) { juce::var m(new juce::DynamicObject()); auto* mo = m.getDynamicObject(); mo->setProperty("type", S(s.pm.type)); mo->setProperty("mat", S(s.pm.mat));
+        mo->setProperty("decay", s.pm.decay); mo->setProperty("bright", s.pm.bright); mo->setProperty("pos", s.pm.pos); mo->setProperty("hard", s.pm.hard); mo->setProperty("level", s.pm.level); o->setProperty("model", m); }
     auto filt = [&](const char* k, const FilterP& f) { juce::var v = clone(base.getProperty(k, juce::var())); auto* fo = objOf(v); fo->setProperty("on", f.on); fo->setProperty("type", S(f.type)); fo->setProperty("cutoff", f.cutoff); fo->setProperty("q", f.q); fo->setProperty("env", f.env); fo->setProperty("key", f.key); if (!std::strcmp(k, "filter")) fo->setProperty("drive", f.drive); o->setProperty(k, v); };
     filt("filter", s.f1); filt("filter2", s.f2); o->setProperty("froute", S(s.froute));
     juce::var sh(new juce::DynamicObject()); sh.getDynamicObject()->setProperty("type", S(s.shaperType)); sh.getDynamicObject()->setProperty("amt", s.shaperAmt); o->setProperty("shaper", sh);
