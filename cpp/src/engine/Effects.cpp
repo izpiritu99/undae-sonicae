@@ -899,6 +899,129 @@ public:
     }
 };
 
+// LFO rate from a note-length choice at the project tempo, or free Hz.
+inline double lfoRate(const std::string& sync, double hz, double bpm) { const double nb = noteBeats(sync); return nb > 0 ? std::max(20.0, bpm) / 60 / nb : hz; }
+
+// Flanger: a short delay (`delay` ms) swept by a sine LFO (free or tempo-synced, the right side `phase` degrees later),
+// with feedback (negative for the hollow sound) and an equal-power blend.
+class Flanger : public Effect {
+    DelayLine dl, dr; double base = 2, depth = 0.7, fb = 0.5, hz = 0.25, phase = 90, ph = 0, yl = 0, yr = 0; std::string sync = "free"; WetDry m;
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); dl.init((size_t)(0.05 * s) + 8); dr.init((size_t)(0.05 * s) + 8); }
+    void set(const FxSlot& f) override { base = f.num("delay", 2); depth = f.num("depth", 0.7); fb = f.num("fb", 0.5); hz = f.num("rate", 0.25); sync = f.str("sync", "free"); phase = f.num("phase", 90); m.mix(f.num("mix", 0.5)); }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double rate = lfoRate(sync, hz, bpm), po = phase / 360, b = base * 0.001 * sr;
+        if (beat >= 0 && noteBeats(sync) > 0) { const double cyc = beat / noteBeats(sync); ph = cyc - std::floor(cyc); }   // locked to the song
+        for (int i = 0; i < n; i++) {
+            const double sl = 0.5 + 0.5 * std::sin(2 * PI * ph), sr2 = 0.5 + 0.5 * std::sin(2 * PI * (ph + po));
+            ph += rate / sr; ph -= std::floor(ph);
+            const double dL = std::max(1.0, b * (1 - depth * sl)), dR = std::max(1.0, b * (1 - depth * sr2));
+            dl.push((float)(L[i] + fb * yl)); dr.push((float)(R[i] + fb * yr));
+            yl = dl.read(dL); yr = dr.read(dR);
+            L[i] = (float)(L[i] * m.dry + yl * m.wet); R[i] = (float)(R[i] * m.dry + yr * m.wet);
+        }
+    }
+};
+
+// Ring modulator: the signal times a band-limited sine / triangle / square carrier at `freq` Hz (the classic bell and
+// robot sounds); `lfo` wobbles the carrier frequency by up to an octave at `lrate` Hz.
+class RingMod : public Effect {
+    double freq = 440, lfo = 0, lrate = 1, ph = 0, lph = 0; const WaveTable* wt = nullptr; std::string wave = "sine"; WetDry m;
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); wt = &WaveTable::get("sine"); }
+    void set(const FxSlot& f) override {
+        freq = f.num("freq", 440); lfo = f.num("lfo", 0); lrate = f.num("lrate", 1); m.mix(f.num("mix", 1));
+        const std::string w = f.str("wave", "sine"); if (w != wave || !wt) { wave = w; wt = &WaveTable::get(w == "square" ? "square" : w == "triangle" ? "triangle" : "sine"); }
+    }
+    void process(float* L, float* R, int n) override {
+        for (int i = 0; i < n; i++) {
+            const double f = freq * std::pow(2.0, lfo * std::sin(2 * PI * lph)); lph += lrate / sr; lph -= std::floor(lph);
+            const float c = wt->read(ph, f, sr); ph += f / sr; ph -= std::floor(ph);
+            L[i] = (float)(L[i] * m.dry + L[i] * c * m.wet); R[i] = (float)(R[i] * m.dry + R[i] * c * m.wet);
+        }
+    }
+};
+
+// Frequency shifter: an IIR Hilbert transformer (two chains of four first-order-in-z^2 all-passes whose outputs stay
+// 90 degrees apart from about 20 Hz to 20 kHz; coefficients after Olli Niemitalo's published design) gives the analytic
+// signal, which is turned by `shift` Hz (single sideband). Every partial moves by the same Hz, so harmonics stop being
+// harmonic: the metallic, detuned sound. "Opposite" shifts the right side the other way, for width.
+class FreqShift : public Effect {
+    struct Chain { double c[4]; double x1[4] = {}, x2[4] = {}, y1[4] = {}, y2[4] = {};
+        double tick(double x) { for (int k = 0; k < 4; k++) { const double y = c[k] * (x + y2[k]) - x2[k]; x2[k] = x1[k]; x1[k] = x; y2[k] = y1[k]; y1[k] = y; x = y; } return x; } };
+    static Chain chainA() { Chain c{ { 0.6923878 * 0.6923878, 0.9360654322959 * 0.9360654322959, 0.9882295226860 * 0.9882295226860, 0.9987488452737 * 0.9987488452737 } }; return c; }
+    static Chain chainB() { Chain c{ { 0.4021921162426 * 0.4021921162426, 0.8561710882420 * 0.8561710882420, 0.9722909545651 * 0.9722909545651, 0.9952884791278 * 0.9952884791278 } }; return c; }
+    Chain aL = chainA(), bL = chainB(), aR = chainA(), bR = chainB(); double dL = 0, dR = 0, shift = 100, ph = 0; bool opp = false; WetDry m;
+public:
+    void set(const FxSlot& f) override { shift = f.num("shift", 100) + f.num("fine", 0); opp = f.str("stereo", "same") == "opposite"; m.mix(f.num("mix", 1)); }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        for (int i = 0; i < n; i++) {
+            const double c = std::cos(2 * PI * ph), s = std::sin(2 * PI * ph); ph += shift / sr; ph -= std::floor(ph);
+            const double iL = dL, qL = bL.tick(L[i]); dL = aL.tick(L[i]);   // the first chain is one sample later
+            const double iR = dR, qR = bR.tick(R[i]); dR = aR.tick(R[i]);
+            const double yl = iL * c + qL * s, yr = opp ? iR * c - qR * s : iR * c + qR * s;   // + : up by `shift`
+            L[i] = (float)(L[i] * m.dry + yl * m.wet); R[i] = (float)(R[i] * m.dry + yr * m.wet);
+        }
+    }
+};
+
+// Rotary speaker: a crossover at 800 Hz splits a horn (highs) and a drum (lows), each spinning at its own slow / fast
+// speed with inertia (the horn spins up in about half a second, the drum in two and a half). Each rotor gives
+// amplitude and Doppler (pitch) modulation and swings between the two microphones; `drive` adds the amplifier's grit.
+class Rotary : public Effect {
+    Biquad2 lo1, lo2, hi1, hi2; DelayLine hd, dd; double hornHz = 0.8, drumHz = 0.7, hph = 0, dph = 0.25, drive = 0, width = 1; std::string speed = "slow"; WetDry m;
+public:
+    void prepare(double s, int b) override {
+        Effect::prepare(s, b); hd.init((size_t)(0.01 * s) + 8); dd.init((size_t)(0.01 * s) + 8);
+        for (Biquad2* q : { &lo1, &lo2 }) { q->setType(FilterType::Lowpass); q->set(s, 800, Q_BW2, 0); }
+        for (Biquad2* q : { &hi1, &hi2 }) { q->setType(FilterType::Highpass); q->set(s, 800, Q_BW2, 0); }
+    }
+    void set(const FxSlot& f) override { speed = f.str("speed", "slow"); drive = f.num("drive", 0); width = f.num("width", 1); m.mix(f.num("mix", 1)); }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const bool fast = speed == "fast", stop = speed == "stop";
+        const double ht = stop ? 0 : fast ? 6.7 : 0.8, dt = stop ? 0 : fast ? 5.7 : 0.7;
+        const double hk = 1 - std::exp(-1 / (0.5 * sr)), dk = 1 - std::exp(-1 / (2.5 * sr)), dg = 1 + drive * 6;
+        for (int i = 0; i < n; i++) {
+            hornHz += (ht - hornHz) * hk; drumHz += (dt - drumHz) * dk;
+            hph += hornHz / sr; hph -= std::floor(hph); dph += drumHz / sr; dph -= std::floor(dph);
+            double x = 0.5 * (L[i] + R[i]); if (drive > 0) x = std::tanh(x * dg) / std::tanh(dg);
+            float h = (float)x, hb = (float)x, d = (float)x, db = (float)x; hi1.tick(h, hb); hi2.tick(h, hb); lo1.tick(d, db); lo2.tick(d, db);
+            hd.push(h); dd.push(d);
+            const double hs = std::sin(2 * PI * hph), hc = std::cos(2 * PI * hph), ds = std::sin(2 * PI * dph), dc = std::cos(2 * PI * dph);
+            const double hv = hd.read(1 + 0.00035 * sr * (1 + hs)), dv = dd.read(1 + 0.00015 * sr * (1 + ds));   // Doppler
+            const double ha = 0.75 + 0.25 * hc, da = 0.85 + 0.15 * dc;                                             // facing the listener or away
+            const double pan = hc * width * 0.5, dpan = dc * width * 0.25;
+            const double l = hv * ha * (1 - pan) * 0.7 + dv * da * (1 - dpan) * 0.7, r = hv * ha * (1 + pan) * 0.7 + dv * da * (1 + dpan) * 0.7;
+            L[i] = (float)(L[i] * m.dry + l * m.wet); R[i] = (float)(R[i] * m.dry + r * m.wet);
+        }
+    }
+};
+
+// Auto-pan / tremolo: an LFO (sine, triangle or a softened square), free or locked to the song's beat, moves the sound
+// between the sides (pan) or its level (tremolo) by `depth`.
+class AutoPan : public Effect {
+    std::string mode = "tremolo", shape = "sine", sync = "1/8"; double hz = 4, depth = 0.5, ph = 0;
+    double lfo(double p) const {   // 1 at phase 0, -1 at phase 0.5
+        if (shape == "triangle") return 1 - 4 * std::abs(p - std::round(p));
+        if (shape == "square") return std::tanh(6 * std::cos(2 * PI * p)) / std::tanh(6.0);
+        return std::cos(2 * PI * p);
+    }
+public:
+    void set(const FxSlot& f) override { mode = f.str("mode", "tremolo"); shape = f.str("shape", "sine"); sync = f.str("sync", "1/8"); hz = f.num("rate", 4); depth = f.num("depth", 0.5); }
+    void process(float* L, float* R, int n) override {
+        const double rate = lfoRate(sync, hz, bpm);
+        if (beat >= 0 && noteBeats(sync) > 0) { const double cyc = beat / noteBeats(sync); ph = cyc - std::floor(cyc); }
+        for (int i = 0; i < n; i++) {
+            const double v = lfo(ph); ph += rate / sr; ph -= std::floor(ph);
+            if (mode == "pan") { const double p = clampd(-v * depth, -1, 1); const double gl = std::cos((p + 1) * PI / 4) * std::sqrt(2.0), gr = std::sin((p + 1) * PI / 4) * std::sqrt(2.0); L[i] = (float)(L[i] * gl); R[i] = (float)(R[i] * gr); }
+            else { const double g = 1 - depth * (0.5 - 0.5 * v); L[i] = (float)(L[i] * g); R[i] = (float)(R[i] * g); }
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -932,6 +1055,11 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "meters") return std::make_unique<Meters>();
     if (t == "pitchfix") return std::make_unique<PitchFix>();
     if (t == "multiband") return std::make_unique<Multiband>();
+    if (t == "flanger") return std::make_unique<Flanger>();
+    if (t == "ringmod") return std::make_unique<RingMod>();
+    if (t == "fshift") return std::make_unique<FreqShift>();
+    if (t == "rotary") return std::make_unique<Rotary>();
+    if (t == "autopan") return std::make_unique<AutoPan>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 

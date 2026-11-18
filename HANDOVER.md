@@ -925,6 +925,19 @@ Next: multiband compressor (13), modulation extras (14), lo-fi (15), then the in
   Listen mid drops 60 Hz 42 dB. No gain-reduction display yet.
 Next: modulation extras (14), lo-fi (15), then the instruments.
 
+- **Modulation extras** (item 14), self-test 38 / 38:
+  - **Flanger** (`flanger`): swept short delay, free or tempo-locked sweep, feedback +-0.95, stereo phase offset. Check:
+    a fixed 5 ms comb notches 100 Hz by 41 dB and lifts 200 Hz by 3.0 dB.
+  - **Ring mod** (`ringmod`): band-limited sine / triangle / square carrier, frequency wobble. Check: 300 Hz x 1 kHz
+    gives 700 and 1300 Hz with no 300 Hz left.
+  - **Freq shifter** (`fshift`): IIR Hilbert pair (Niemitalo's coefficients) and single-sideband shift +-1000 Hz plus
+    fine, right side the same or opposite. Check: 1000 Hz shifted +100 comes out at 1100 Hz, the mirror at 900 Hz -49 dB.
+  - **Rotary speaker** (`rotary`): horn / drum split at 800 Hz, slow / fast / stop with spin-up inertia, amplitude,
+    Doppler and mic swing, drive. Check: it moves the level and the two sides differ.
+  - **Auto-pan** (`autopan`): tremolo or pan, sine / triangle / soft square, note lengths locked to the song or free.
+    Check: at 1/4 and depth 1 the level dips 67 dB halfway between beats; pan swings the sides 63 dB apart.
+Next: lo-fi (15), then the instruments.
+
 ## Linux catch-up list (for later; work is Windows-only for now)
 
 The owner is working on Windows only for now (Android work is fine from Windows: the SDK, Android Studio, the emulator
@@ -939,13 +952,14 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (37 after the multiband compressor; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (38 after the modulation effects; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
 4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
-   `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`). Until then, do not open projects that use them in the Electron app.
+   `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
+   `autopan`). Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).

@@ -59,6 +59,15 @@ const std::vector<FxSpec>& fxSpecs() {
             { "mthr", "Mid thresh", -60, 0, -20, false, {} }, { "mratio", "Mid ratio", 1, 20, 3, false, {} }, { "mgain", "Mid gain", -12, 12, 0, false, {} },
             { "hthr", "High thresh", -60, 0, -20, false, {} }, { "hratio", "High ratio", 1, 20, 3, false, {} }, { "hgain", "High gain", -12, 12, 0, false, {} },
             { "att", "Attack", 0.001, 0.1, 0.01, true, {} }, { "rel", "Release", 0.02, 1, 0.15, true, {} }, { "out", "Output", -12, 12, 0, false, {} } } },
+        { "flanger", "Flanger", { { "sync", "Sweep", 0, 0, 0, false, { "free", "1/4", "1/2", "1 bar" } }, { "rate", "Free Hz", 0.02, 5, 0.25, true, {} }, { "delay", "Delay ms", 0.3, 10, 2, true, {} },
+            { "depth", "Depth", 0, 1, 0.7, false, {} }, { "fb", "Feedback", -0.95, 0.95, 0.5, false, {} }, { "phase", "Stereo deg", 0, 180, 90, false, {} }, { "mix", "Mix", 0, 1, 0.5, false, {} } } },
+        { "ringmod", "Ring mod", { { "wave", "Wave", 0, 0, 0, false, { "sine", "triangle", "square" } }, { "freq", "Freq Hz", 1, 5000, 440, true, {} }, { "lfo", "Wobble", 0, 1, 0, false, {} },
+            { "lrate", "Wobble Hz", 0.05, 10, 1, true, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "fshift", "Freq shifter", { { "stereo", "Right side", 0, 0, 0, false, { "same", "opposite" } }, { "shift", "Shift Hz", -1000, 1000, 100, false, {} }, { "fine", "Fine Hz", -10, 10, 0, false, {} },
+            { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "rotary", "Rotary speaker", { { "speed", "Speed", 0, 0, 0, false, { "slow", "fast", "stop" } }, { "drive", "Drive", 0, 1, 0, false, {} }, { "width", "Width", 0, 1, 1, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "autopan", "Auto-pan", { { "mode", "Moves", 0, 0, 0, false, { "tremolo", "pan" } }, { "shape", "Shape", 0, 0, 0, false, { "sine", "triangle", "square" } },
+            { "sync", "Rate", 0, 0, 0, false, { "1/8", "1/16", "1/8 triplet", "1/4", "1/2", "1 bar", "free" } }, { "rate", "Free Hz", 0.05, 20, 4, true, {} }, { "depth", "Depth", 0, 1, 0.5, false, {} } } },
     };
     return v;
 }

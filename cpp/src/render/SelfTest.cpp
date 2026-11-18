@@ -300,6 +300,26 @@ int main(int argc, char** argv) {
                   "multiband: flat within " + std::to_string(worstFlat) + " dB with ratio 1, the low band at 10:1 pulls 80 Hz down " + std::to_string(-low80) + " dB and leaves 1 kHz at "
                   + std::to_string(mid1k) + " dB; Listen mid drops 60 Hz " + std::to_string(-lis80) + " dB");
         }
+        // modulation: flanger comb, ring modulator sidebands, frequency shifter single sideband, rotary movement, auto-pan
+        {
+            auto fl = ui::newFx("flanger"); fl.p.set("depth", 0.0); fl.p.set("fb", 0.0); fl.p.set("delay", 5.0); fl.p.set("mix", 0.5);   // a fixed 5 ms comb
+            const double notch = lvl(runFx(fl, sine(100, 0.3))) - lvl(sine(100, 0.3)), peak = lvl(runFx(fl, sine(200, 0.3))) - lvl(sine(200, 0.3));
+            auto rm = ui::newFx("ringmod"); rm.p.set("freq", 1000.0); auto ro2 = runFx(rm, sine(300, 0.5));
+            const double side = std::min(tone(ro2, 700), tone(ro2, 1300)), carrierLeak = tone(ro2, 300);
+            auto fs = ui::newFx("fshift"); fs.p.set("shift", 100.0); auto fo = runFx(fs, sine(1000, 0.5));
+            const double up = tone(fo, 1100), mirror = tone(fo, 900), orig = tone(fo, 1000);
+            auto rt = ui::newFx("rotary"); rt.p.set("speed", juce::String("fast")); auto rs = runSt(rt, sine(1500, 0.3), sine(1500, 0.3));
+            double rlo = 1e9, rhi = -1e9, lrDiff = 0; for (double t0 = 0.5; t0 < 0.95; t0 += 0.01) { const double v = win(rs.first, t0, t0 + 0.01); rlo = std::min(rlo, v); rhi = std::max(rhi, v); }
+            for (int i = N / 2; i < N; i++) lrDiff = std::max(lrDiff, (double)std::abs(rs.first[(size_t)i] - rs.second[(size_t)i]));
+            auto ap = ui::newFx("autopan"); ap.p.set("sync", juce::String("1/4")); ap.p.set("depth", 1.0); auto ao = runTempo(ap, sine(1000, 0.5), sine(1000, 0.5)).first;   // 1/4 at 120 BPM: 0.5 s
+            const double onBeat = win(ao, 0.495, 0.505), offBeat = win(ao, 0.245, 0.255);
+            auto pp = ap; pp.p.set("mode", juce::String("pan")); auto po2 = runTempo(pp, sine(1000, 0.5), sine(1000, 0.5));
+            const double panL = win(po2.first, 0.245, 0.255) - win(po2.second, 0.245, 0.255);
+            check(notch < -20 && std::abs(peak - 3) < 0.5 && side > 0.2 && carrierLeak < 0.005 && up > 0.45 && mirror < 0.02 && orig < 0.02 && rhi - rlo > 3 && lrDiff > 0.05 && offBeat < onBeat - 30 && std::abs(panL) > 20,
+                  "modulation: flanger comb " + std::to_string(notch) + " / +" + std::to_string(peak) + " dB, ring mod sidebands " + std::to_string(side) + " (300 Hz left " + std::to_string(carrierLeak)
+                  + "), shifter 1000 -> 1100 Hz at " + std::to_string(up) + " (900 Hz " + std::to_string(mirror) + "), rotary moves " + std::to_string(rhi - rlo) + " dB, tremolo dips "
+                  + std::to_string(onBeat - offBeat) + " dB off the beat, auto-pan " + std::to_string(panL) + " dB side to side");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;
