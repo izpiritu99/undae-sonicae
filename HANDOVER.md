@@ -1060,8 +1060,12 @@ Second round done.
     the sides.
   - **Scratch** (`scratch`): the recent sound swung back and forth like a record under a hand (sine or zigzag motion,
     depth in beats, locked to the song). Check: 97 % of a steady tone is moved off its pitch.
-- **Android**: not built this round. The NDK (28.1, several hundred MB) is not installed on this PC and Gradle would
-  download it; that needs the owner's go-ahead first.
+- **Android, built on Windows** (2026-11-17): with the owner's go-ahead Gradle downloaded NDK 28.1 and CMake 3.22.1;
+  `cpp/Builds/Android/local.properties` holds `sdk.dir=C\:/Users/k/AppData/Local/Android/Sdk` (ignored by git), and
+  Gradle runs with `JAVA_HOME=C:\Program Files\Android\Android Studio\jbr`: `gradlew.bat assembleRelease` (25 min the
+  first time). The release APK (arm64-v8a and x86_64, signed with the local debug key) is 37.8 MB, copied to
+  `C:\dev\undae-sonicae\builds\undae-sonicae-native-0.3.0-builtins-android.apk`. No warnings from this round's code
+  under clang. Not run yet: this PC has no emulator or system image, and no phone was connected.
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -1089,8 +1093,8 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp", "slice" / "slices" to the Electron engine. Until then the Electron app ignores them (the project opens, but saving it from there may
    drop those settings: not checked).
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
-6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
-   (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).
+6. **Android**: built on Windows (see "Android, built on Windows"); still to run on a phone or an emulator and check
+   CPU there.
 7. **Branches**: the laptop's `main` was fast-forwarded to `windows`. Decide whether `main` simply follows `windows`
    from now on, and push the result back to wherever the canonical copy lives.
 8. **Anything else added on Windows**: each later Windows change that touches platform code (`PluginHost.cpp`,
