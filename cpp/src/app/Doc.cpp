@@ -50,6 +50,10 @@ const std::vector<FxSpec>& fxSpecs() {
             { "att", "Attack", 0.001, 0.05, 0.004, true, {} }, { "rel", "Release", 0.01, 0.4, 0.04, true, {} }, { "noise", "Hiss", 0, 1, 0.3, false, {} },
             { "out", "Output", -12, 24, 0, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
         { "meters", "Meters", { { "view", "Show", 0, 0, 0, false, { "spectrum", "scope", "tuner" } } } },
+        { "pitchfix", "Pitch correct", { { "key", "Key", 0, 0, 0, false, { "song", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" } },
+            { "scale", "Scale", 0, 0, 0, false, { "song", "chromatic", "major", "minor", "major pentatonic", "minor pentatonic", "blues", "harmonic minor", "dorian", "mixolydian" } },
+            { "speed", "Speed ms", 0, 400, 20, false, {} }, { "amount", "Amount", 0, 1, 1, false, {} }, { "formant", "Formant", -6, 6, 0, false, {} },
+            { "low", "Lowest Hz", 60, 300, 90, true, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
     };
     return v;
 }

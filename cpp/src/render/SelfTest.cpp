@@ -264,6 +264,30 @@ int main(int argc, char** argv) {
                   "meters: -20 dBFS 1 kHz reads momentary " + std::to_string(mom) + ", short " + std::to_string(sh) + ", integrated " + std::to_string(in) + " LUFS (-20), true peak "
                   + std::to_string(tpk) + " dBTP, correlation " + std::to_string(c1) + " / " + std::to_string(c2) + " (opposite phase), tuner hears 440 Hz as note " + std::to_string(midi));
         }
+        // pitch correction: an off-key voice-like tone (8 harmonics) comes out on the nearest note of the key
+        {
+            auto voiceAt = [&](double hz) { std::vector<float> v((size_t)N); double ph = 0; for (int i = 0; i < N; i++) { double s = 0; for (int h = 1; h <= 8; h++) s += std::sin(2 * 3.14159265358979 * h * ph) / h; v[(size_t)i] = (float)(0.25 * s); ph += hz / sr; ph -= std::floor(ph); } return v; };
+            auto runPf = [&](const us::FxSlot& f, const std::vector<float>& x, int root, const std::string& scale) {
+                auto e = us::makeEffect("pitchfix"); e->prepare(sr, 512); e->set(f); e->keyRoot = root; e->keyScale = &scale; std::vector<float> L = x, R = x;
+                for (int o = 0; o < N; o += 512) e->process(L.data() + o, R.data() + o, std::min(512, N - o));
+                return L;
+            };
+            auto pitchAt = [&](const std::vector<float>& v) { std::vector<float> seg(v.begin() + N / 2, v.begin() + N / 2 + 4096); return us::pitchOf(seg, sr); };
+            const std::string chrom = "chromatic", cmaj = "major";
+            auto pf = ui::newFx("pitchfix"); pf.p.set("speed", 0.0);
+            const auto sharpA = voiceAt(450.0);                       // A4 + 39 cents
+            const double fixedA = pitchAt(runPf(pf, sharpA, 0, chrom)), rawA = pitchAt(sharpA);
+            const auto cs = voiceAt(440.0 * std::pow(2.0, (61.3 - 69) / 12));   // C#4 + 30 cents: in C major the nearest note is D4
+            const double fixedD = pitchAt(runPf(pf, cs, 0, cmaj));
+            auto pf0 = pf; pf0.p.set("amount", 0.0); auto same = runPf(pf0, sharpA, 0, chrom); const double untouched = pitchAt(same);
+            const double lvl0 = win(same, 0.5, 0.9) - win(sharpA, 0.5, 0.9);
+            // steadiness (no warble): 10 ms RMS windows of the corrected tone stay within 1.5 dB; speed for live use
+            const auto fx = runPf(pf, sharpA, 0, chrom); double lo = 1e9, hi = -1e9; for (double t0 = 0.3; t0 < 0.95; t0 += 0.01) { const double v = win(fx, t0, t0 + 0.01); lo = std::min(lo, v); hi = std::max(hi, v); }
+            const auto t1 = juce::Time::getMillisecondCounterHiRes(); for (int r = 0; r < 4; r++) runPf(pf, sharpA, 0, chrom); const double rt = 4000.0 / (juce::Time::getMillisecondCounterHiRes() - t1);
+            check(std::abs(fixedA - 69) < 0.06 && std::abs(rawA - 69.39) < 0.06 && std::abs(fixedD - 62) < 0.06 && std::abs(untouched - 69.39) < 0.06 && std::abs(lvl0) < 1.5 && hi - lo < 1.5 && rt > 10,
+                  "pitch correction: A4 +39 cents comes out as note " + std::to_string(fixedA) + " (69), C#4 +30 cents in C major as " + std::to_string(fixedD) + " (62), amount 0 leaves "
+                  + std::to_string(untouched) + " at " + std::to_string(lvl0) + " dB; level ripple " + std::to_string(hi - lo) + " dB, " + std::to_string((int)rt) + "x real time");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

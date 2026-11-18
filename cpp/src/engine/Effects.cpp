@@ -1,4 +1,5 @@
 #include "Effects.h"
+#include "Analysis.h"
 #include <complex>
 #include <map>
 #include <mutex>
@@ -762,6 +763,98 @@ public:
     }
 };
 
+// Pitch correction: real-time YIN on a 4x-decimated copy (every 128 samples) finds the voice's period; the correction
+// toward the nearest note of the key (the song's or a chosen one) glides over `speed` ms (0 = instant, the hard robotic
+// sound); TD-PSOLA moves the pitch while keeping the formants: two-period Hann grains centred on analysis marks one
+// input period apart are laid down one output period apart. Unvoiced parts (breaths, consonants) keep their pitch.
+// `formant` stretches each grain (moves the formants without the pitch). Latency: lowest period x (1 + formant
+// stretch), about 20-30 ms; the dry path is delayed to match.
+class PitchFix : public Effect {
+    static constexpr int R = 1 << 16, MR = 1024, DR = 2048;
+    std::vector<float> inM, inL, inR, acc; int64_t n = 0;
+    Biquad aa1, aa2; std::vector<float> dh; int64_t dn = 0; int dec = 4, dcount = 0, W = 256, tMinD = 8, tMaxD = 160; std::vector<double> dbuf;
+    double mPos[MR] = {}, mPer[MR] = {}, mRat[MR] = {}; int64_t mCount = 0, mIdx = 0; double lastMark = 0, nextSyn = 0;
+    double period = 0, hist[3] = {}, corr = 0, maxP = 600, D = 1000, frMax = 1.42; bool voiced = false; int hopLeft = 0;
+    std::string root = "song", scale = "song"; double speed = 20, amount = 1, formant = 0, low = 90; WetDry m; double lastLow = -1;
+    inline float at(const std::vector<float>& b, double p) const { const int64_t i = (int64_t)std::floor(p); const double f = p - (double)i; return (float)(b[(size_t)(i & (R - 1))] * (1 - f) + b[(size_t)((i + 1) & (R - 1))] * f); }
+    void reset() {
+        inM.assign(R, 0.f); inL.assign(R, 0.f); inR.assign(R, 0.f); acc.assign(R, 0.f); dh.assign(DR, 0.f); n = 0; dn = 0; dcount = 0; mCount = 0; mIdx = 0; lastMark = 0; nextSyn = 0; corr = 0; voiced = false; period = 0; hopLeft = 0;
+        maxP = sr / std::max(50.0, low); D = std::ceil(maxP * (1 + frMax)) + 4;
+        dec = std::max(1, (int)std::lround(sr / 12000)); const double dr = sr / dec; tMinD = std::max(2, (int)(dr / 1200)); tMaxD = std::min(DR / 2 - W - 2, (int)std::ceil(dr / std::max(50.0, low)));
+        dbuf.assign((size_t)tMaxD + 2, 0.0);
+        for (Biquad* q : { &aa1, &aa2 }) { q->type = FilterType::Lowpass; q->set(sr, std::min(4500.0, dr * 0.4), Q_BW2, 0); }
+    }
+    double detect() {   // YIN on the newest W + tMax decimated samples: the period in input samples, or 0
+        const int64_t end = dn; std::vector<double>& d = dbuf; double rms = 0;
+        auto x = [&](int k) { return (double)dh[(size_t)((end - W - tMaxD + k) & (DR - 1))]; };
+        for (int j = 0; j < W; j++) rms += x(j) * x(j);
+        if (std::sqrt(rms / W) < 0.004) return 0;
+        double run = 0; d[0] = 1;
+        for (int tau = 1; tau <= tMaxD; tau++) { double s = 0; for (int j = 0; j < W; j++) { const double v = x(j) - x(j + tau); s += v * v; } run += s; d[(size_t)tau] = run > 0 ? s * tau / run : 1; }
+        int best = -1; for (int tau = tMinD; tau < tMaxD; tau++) if (d[(size_t)tau] < 0.15) { while (tau + 1 < tMaxD && d[(size_t)tau + 1] < d[(size_t)tau]) tau++; best = tau; break; }
+        if (best < 0) return 0;
+        const double a = d[(size_t)best - 1], b = d[(size_t)best], c = d[(size_t)best + 1], den = a - 2 * b + c;
+        const double t = best + (std::abs(den) > 1e-12 ? 0.5 * (a - c) / den : 0);
+        return t * dec;
+    }
+    double nearestNote(double midi) const {
+        const int r = root == "song" ? keyRoot : std::max(0, (int)(std::find(std::begin(NOTE_KEYS), std::end(NOTE_KEYS), root) - std::begin(NOTE_KEYS)) % 12);
+        const std::string& sn = scale == "song" ? (keyScale ? *keyScale : scale) : scale;
+        const std::vector<int>* sc = &scales()[0].second; for (auto& [k, v] : scales()) if (k == sn) sc = &v;
+        double best = std::round(midi), bd = 1e9;
+        for (int k = (int)std::floor(midi) - 3; k <= (int)std::ceil(midi) + 3; k++) { const int pc = (((k - r) % 12) + 12) % 12; if (std::find(sc->begin(), sc->end(), pc) != sc->end() && std::abs(k - midi) < bd) { bd = std::abs(k - midi); best = k; } }
+        return best;
+    }
+public:
+    static constexpr const char* NOTE_KEYS[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    double latencySamples() const { return D; }
+    void prepare(double s, int b) override { Effect::prepare(s, b); lastLow = -1; }
+    void set(const FxSlot& f) override {
+        root = f.str("key", "song"); scale = f.str("scale", "song"); speed = f.num("speed", 20); amount = f.num("amount", 1); formant = clampd(f.num("formant", 0), -6, 6); m.mix(f.num("mix", 1));
+        low = f.num("low", 90); if (low != lastLow) { lastLow = low; reset(); }
+    }
+    void process(float* L, float* Rr, int nn) override {
+        juce::ScopedNoDenormals nd;
+        const double fr = std::pow(2.0, formant / 12), hopSec = 128 / sr, k = speed <= 0.5 ? 1.0 : 1 - std::exp(-hopSec / (speed / 1000));
+        for (int i = 0; i < nn; i++) {
+            const size_t w = (size_t)(n & (R - 1)); const float mono = 0.5f * (L[i] + Rr[i]); inM[w] = mono; inL[w] = L[i]; inR[w] = Rr[i];
+            const double fl = aa2.tick(aa1.tick(mono)); if (++dcount >= dec) { dcount = 0; dh[(size_t)(dn & (DR - 1))] = (float)fl; dn++; }
+            if (--hopLeft <= 0) {
+                hopLeft = 128;
+                const double p = dn > W + tMaxD ? detect() : 0;
+                hist[0] = hist[1]; hist[1] = hist[2]; hist[2] = p;
+                const double med = std::max(std::min(hist[0], hist[1]), std::min(std::max(hist[0], hist[1]), hist[2]));
+                voiced = med > 0 && p > 0; if (voiced) period = std::min(p, maxP);
+                if (voiced) { const double mi = 69 + 12 * std::log2(sr / period / 440); const double tgt = clampd((nearestNote(mi) - mi) * amount, -6, 6); corr += (tgt - corr) * k; }
+            }
+            const double Tm = voiced ? period : std::round(0.005 * sr);
+            while (lastMark + Tm <= (double)n) { lastMark += Tm; const int64_t s = mCount % MR; mPos[s] = lastMark; mPer[s] = Tm; mRat[s] = voiced ? std::pow(2.0, corr / 12) : 1.0; mCount++; }
+            // synthesis: every grain that reaches the output read point p = n - D
+            const double p = (double)n - D;
+            while (mCount > 0) {
+                if (mIdx < mCount - MR + 1) mIdx = mCount - MR + 1;
+                if (mIdx < 0) mIdx = 0;
+                while (mIdx + 1 < mCount && std::abs(mPos[(mIdx + 1) % MR] - nextSyn) <= std::abs(mPos[mIdx % MR] - nextSyn)) mIdx++;
+                int64_t j = mIdx; while (j > 0 && mPos[j % MR] + mPer[j % MR] * fr > (double)n) j--;
+                const double a = mPos[j % MR], h = std::min(mPer[j % MR], maxP), rat = mRat[j % MR];
+                if (nextSyn > p + h) break;
+                if (a + h * fr > (double)n) break;
+                const double g = 1 / rat;
+                for (int64_t q = (int64_t)std::ceil(nextSyn - h); q <= (int64_t)std::floor(nextSyn + h); q++) {
+                    if ((double)q <= p - 1) continue;
+                    const double t = (double)q - nextSyn; const double wv = 0.5 * (1 + std::cos(PI * t / h));
+                    acc[(size_t)(q & (R - 1))] += (float)(wv * g * at(inM, a + t * fr));
+                }
+                nextSyn += h / rat;
+            }
+            float y = 0, dl = 0, dr = 0;
+            if (p >= 0) { const size_t pi = (size_t)((int64_t)p & (R - 1)); y = acc[pi]; acc[pi] = 0; dl = inL[pi]; dr = inR[pi]; }
+            L[i] = (float)(dl * m.dry + y * m.wet); Rr[i] = (float)(dr * m.dry + y * m.wet);
+            n++;
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -793,6 +886,7 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "glitch") return std::make_unique<Glitch>();
     if (t == "vocoder") return std::make_unique<Vocoder>();
     if (t == "meters") return std::make_unique<Meters>();
+    if (t == "pitchfix") return std::make_unique<PitchFix>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 

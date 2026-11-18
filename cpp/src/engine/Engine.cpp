@@ -321,7 +321,7 @@ struct Engine::Graph {
             const double w = B.mono ? 0 : B.width, inv = B.inv ? -1 : 1, d = (1 + w) / 2, x = (1 - w) / 2;
             if (inv != 1 || w != 1) for (int i = 0; i < n; i++) { const double l = L[i] * inv, r = R[i] * inv; L[i] = (float)(d * l + x * r); R[i] = (float)(x * l + d * r); }
             for (auto& [e, src] : b.sides) e->side(src->tapL.data(), src->tapR.data(), n);
-            for (size_t i = 0; i < b.fx.size(); i++) if (b.slots[i].on) { auto& fx = *b.fx[i]; fx.frame = (uint32_t)std::llround(t * sr); fx.bpm = P->bpm; fx.beat = rolling ? (tickAt + (t - timeAt) / P->secondsPerTick()) / PPQ : -1; fx.process(L, R, n); }
+            for (size_t i = 0; i < b.fx.size(); i++) if (b.slots[i].on) { auto& fx = *b.fx[i]; fx.frame = (uint32_t)std::llround(t * sr); fx.bpm = P->bpm; fx.keyRoot = P->keyRoot; fx.keyScale = &P->keyScale; fx.beat = rolling ? (tickAt + (t - timeAt) / P->secondsPerTick()) / PPQ : -1; fx.process(L, R, n); }
             std::copy_n(L, n, b.tapL.data()); std::copy_n(R, n, b.tapR.data());
             const double out = B.mute || (anyBusSolo && !B.solo && B.kind == "insert") ? 0 : 1, g = b.vol * out;
             for (int i = 0; i < n; i++) { float l = L[i], r = R[i]; panStereo(l, r, b.pan); L[i] = l * (float)g; R[i] = r * (float)g; }

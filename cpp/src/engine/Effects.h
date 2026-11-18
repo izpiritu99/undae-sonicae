@@ -35,6 +35,7 @@ public:
     uint32_t frame = 0;                                     // where the coming block starts on the engine clock (plug-ins need it)
     double bpm = 120;                                       // the project tempo
     double beat = -1;                                       // song position of the block start in quarter notes; -1 when stopped
+    int keyRoot = 0; const std::string* keyScale = nullptr;  // the project key (pitch correction "song" setting)
 protected:
     double sr = 48000;
 };

@@ -309,7 +309,7 @@ inline void MixerView::FxRack::build() {
                     auto* pk = addPart(new Pick()); pk->l.setText(q.label, juce::dontSendNotification); pk->getProperties().set("role", "pick"); pk->getProperties().set("slot", (int)i);
                     std::vector<std::pair<std::string, juce::String>> opts;
                     if (q.opts[0] == "@buses") { opts.push_back({ "", f.type == "gate" ? "(this bus)" : f.type == "vocoder" ? "(built-in buzz)" : "(choose a bus)" }); for (auto& z : o->doc.p.buses) if (z.id != bid && z.kind != "master") opts.push_back({ z.id, o->doc.busLabel(z.id) + u8(" · ") + juce::String(z.name) }); }
-                    else for (auto& op : q.opts) opts.push_back({ op, op == "full" ? "Whole signal" : op == "band" ? "One frequency band" : op == "split" ? "Only the highs" : op == "wide" ? "Whole signal" : op == "mono" ? "Mono below" : juce::String(op) });
+                    else for (auto& op : q.opts) opts.push_back({ op, op == "full" ? "Whole signal" : op == "band" ? "One frequency band" : op == "split" ? "Only the highs" : op == "wide" ? "Whole signal" : op == "mono" ? "Mono below" : op == "song" ? "From the song" : juce::String(op) });
                     for (size_t j = 0; j < opts.size(); j++) pk->c.addItem(opts[j].second, (int)j + 1);
                     const auto curV = f.str(q.k, ""); for (size_t j = 0; j < opts.size(); j++) if (opts[j].first == curV) pk->c.setSelectedItemIndex((int)j, juce::dontSendNotification);
                     pk->c.onChange = [this, bid, fid, k, opts, pk] { const int j = pk->c.getSelectedItemIndex(); if (j < 0) return; if (auto* x = o->doc.bus(bid)) for (auto& s : x->fx) if (s.id == fid) s.p.set(juce::Identifier(k), juce::String(opts[(size_t)j].first)); o->doc.commit(); };
