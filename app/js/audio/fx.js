@@ -24,7 +24,7 @@ function impulse(ctx, sec, damp) {
 const tanhCurve = (() => { const c = new Float32Array(2048); for (let i = 0; i < 2048; i++) c[i] = Math.tanh((i / 1023.5 - 1) * 3); return c; })();
 function lfo(ctx, rate) { const o = ctx.createOscillator(); o.frequency.value = rate; o.start(); return o; }
 
-export const FX = {
+const FX_DEFS = {
   eq: {
     name: 'EQ', params: [P('low', 'Low', -18, 18, 0, { fmt: db, bi: 1 }), P('mid', 'Mid', -18, 18, 0, { fmt: db, bi: 1 }), P('midf', 'Mid Hz', 200, 8000, 1000, { curve: 'exp', fmt: hz }), P('high', 'High', -18, 18, 0, { fmt: db, bi: 1 })],
     make(ctx, sv) {
@@ -164,6 +164,12 @@ export const FX = {
     },
   },
 };
+
+// Effects that only the native edition has so far (its built-in EQ, de-esser, saturator, reverbs, ... see HANDOVER.md):
+// here they pass the audio through untouched and keep their settings, so a project that uses them still opens, plays
+// (without that effect) and saves without losing anything.
+const nativeOnly = type => ({ name: 'Native: ' + type, params: [], nativeOnly: true, make(ctx) { const g = ctx.createGain(); return { inp: g, out: g, set() {} }; } });
+export const FX = new Proxy(FX_DEFS, { get: (t, k) => (typeof k !== 'string' || k in t) ? t[k] : nativeOnly(k) });
 
 // Envelope follower used by the peak controller: output = how loud the input is right now (0..1).
 const ENV = `registerProcessor('us-env', class extends AudioWorkletProcessor {

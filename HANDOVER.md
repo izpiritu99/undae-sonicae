@@ -785,8 +785,8 @@ The owner is right that most are effects: roughly 70 effects against 20 instrume
   in `fxSpecs()`. The Mixer's "+ Add effect" menu, Sound Design, Settings and automation pick it up from there. The
   side-chain path (`sideSource()` / `side()`) already exists for the peak controller, so a vocoder or a keyed gate can
   take its carrier / key from another bus.
-- Caution: the Electron edition's `makeFx` (`app/js/audio/fx.js`) fails on an effect type it does not know. Before a
-  project that uses a new effect is opened there, either port the effect or make unknown types pass audio through.
+- The Electron edition's `makeFx` (`app/js/audio/fx.js`) now passes effect types it does not know straight through
+  (checked under Node: unknown types give a pass-through node, known ones and the add menus are unchanged).
 
 ### Gaps, in the order to fill them
 
@@ -1056,8 +1056,9 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
-4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
-   types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
+4. **Electron edition**: since 2026-11-17 `app/js/audio/fx.js` passes unknown effect types through untouched (a Proxy
+   over the effect table; settings kept, not listed in its menus), so projects using the native effects open and play
+   there without them. Still to do, if wanted: port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
    `autopan`, `lofi`, `pitchshift`, `doubler`, `autofilter`, `amp`, `subgen`, `dyneq`, `irverb`). The synth's "wt:" wave names and the five wavetable presets also need porting to
    `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp", "slice" / "slices" to the Electron engine. Until then, do not open projects that use them in the Electron app.
