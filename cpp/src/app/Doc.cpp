@@ -54,6 +54,11 @@ const std::vector<FxSpec>& fxSpecs() {
             { "scale", "Scale", 0, 0, 0, false, { "song", "chromatic", "major", "minor", "major pentatonic", "minor pentatonic", "blues", "harmonic minor", "dorian", "mixolydian" } },
             { "speed", "Speed ms", 0, 400, 20, false, {} }, { "amount", "Amount", 0, 1, 1, false, {} }, { "formant", "Formant", -6, 6, 0, false, {} },
             { "low", "Lowest Hz", 60, 300, 90, true, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "multiband", "Multiband comp", { { "listen", "Listen", 0, 0, 0, false, { "all", "low", "mid", "high" } }, { "x1", "Low / mid Hz", 40, 1000, 200, true, {} }, { "x2", "Mid / high Hz", 1000, 10000, 3000, true, {} },
+            { "lthr", "Low thresh", -60, 0, -20, false, {} }, { "lratio", "Low ratio", 1, 20, 3, false, {} }, { "lgain", "Low gain", -12, 12, 0, false, {} },
+            { "mthr", "Mid thresh", -60, 0, -20, false, {} }, { "mratio", "Mid ratio", 1, 20, 3, false, {} }, { "mgain", "Mid gain", -12, 12, 0, false, {} },
+            { "hthr", "High thresh", -60, 0, -20, false, {} }, { "hratio", "High ratio", 1, 20, 3, false, {} }, { "hgain", "High gain", -12, 12, 0, false, {} },
+            { "att", "Attack", 0.001, 0.1, 0.01, true, {} }, { "rel", "Release", 0.02, 1, 0.15, true, {} }, { "out", "Output", -12, 12, 0, false, {} } } },
     };
     return v;
 }

@@ -288,6 +288,18 @@ int main(int argc, char** argv) {
                   "pitch correction: A4 +39 cents comes out as note " + std::to_string(fixedA) + " (69), C#4 +30 cents in C major as " + std::to_string(fixedD) + " (62), amount 0 leaves "
                   + std::to_string(untouched) + " at " + std::to_string(lvl0) + " dB; level ripple " + std::to_string(hi - lo) + " dB, " + std::to_string((int)rt) + "x real time");
         }
+        // multiband: flat when nothing is compressed, the low band alone squeezed, Listen isolates a band
+        {
+            auto gainAt = [&](const us::FxSlot& f, double hz) { const auto x = sine(hz, 0.5); return lvl(runFx(f, x)) - lvl(x); };
+            auto flat = ui::newFx("multiband"); for (const char* k : { "lratio", "mratio", "hratio" }) flat.p.set(k, 1.0);
+            double worstFlat = 0; for (double hz : { 60.0, 200.0, 800.0, 3000.0, 9000.0 }) worstFlat = std::max(worstFlat, std::abs(gainAt(flat, hz)));
+            auto lowSq = flat; lowSq.p.set("lthr", -30.0); lowSq.p.set("lratio", 10.0);
+            const double low80 = gainAt(lowSq, 80), mid1k = gainAt(lowSq, 1000);
+            auto lis = flat; lis.p.set("listen", juce::String("mid")); const double lis80 = gainAt(lis, 60), lis1k = gainAt(lis, 1000);
+            check(worstFlat < 0.1 && low80 < -15 && std::abs(mid1k) < 0.5 && lis80 < -30 && std::abs(lis1k) < 0.5,
+                  "multiband: flat within " + std::to_string(worstFlat) + " dB with ratio 1, the low band at 10:1 pulls 80 Hz down " + std::to_string(-low80) + " dB and leaves 1 kHz at "
+                  + std::to_string(mid1k) + " dB; Listen mid drops 60 Hz " + std::to_string(-lis80) + " dB");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

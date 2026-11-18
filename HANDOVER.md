@@ -918,6 +918,13 @@ Next: pitch correction (12), multiband compressor (13), modulation extras (14), 
   level alone, level ripple 0.7 dB on a steady tone, 72x real time. Not yet tried on a real recorded voice.
 Next: multiband compressor (13), modulation extras (14), lo-fi (15), then the instruments.
 
+- **Multiband comp** (`multiband`, item 13), self-test 37 / 37: three bands from 4th-order Linkwitz-Riley crossovers
+  (the low band also through the upper crossover's pair, so the bands sum flat), per-band threshold / ratio / gain,
+  shared attack / release, 6 dB soft knee, stereo-linked, Listen low / mid / high, output. No dry blend (the crossovers
+  turn the phase). Checks: flat with ratio 1, the low band at 10:1 pulls 80 Hz down 18 dB while 1 kHz is untouched,
+  Listen mid drops 60 Hz 42 dB. No gain-reduction display yet.
+Next: modulation extras (14), lo-fi (15), then the instruments.
+
 ## Linux catch-up list (for later; work is Windows-only for now)
 
 The owner is working on Windows only for now (Android work is fine from Windows: the SDK, Android Studio, the emulator
@@ -932,13 +939,13 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (36 after pitch correction; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (37 after the multiband compressor; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
 4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
-   `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`). Until then, do not open projects that use them in the Electron app.
+   `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`). Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).

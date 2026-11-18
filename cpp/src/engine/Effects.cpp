@@ -855,6 +855,50 @@ public:
     }
 };
 
+// Multiband compressor: three bands split by 4th-order Linkwitz-Riley crossovers at `x1` and `x2` (the low band also
+// goes through the second crossover's low + high pair, so all three sum back flat with matching phase); each band has
+// its own threshold, ratio and gain, sharing attack / release and a 6 dB soft knee; stereo-linked peak detection, no
+// look-ahead. Listen plays one band on its own. No dry / wet blend: the crossovers turn the phase, so a blend would comb.
+class Multiband : public Effect {
+    struct Lr { Biquad2 a, b; void set(FilterType t, double sr, double f) { for (Biquad2* q : { &a, &b }) { q->setType(t); q->set(sr, f, Q_BW2, 0); } } void tick(float& l, float& r) { a.tick(l, r); b.tick(l, r); } };
+    Lr lp1, hp1, lp2, hp2, apL, apH; double x1 = -1, x2 = -1, thr[3] = { -20, -20, -20 }, ratio[3] = { 3, 3, 3 }, gain[3] = {}, gr[3] = {}, att = 0.01, rel = 0.15, out = 1; int listen = -1; WetDry m;
+    double comp(int b, double lvl) {   // gain change in dB for a level in dB (soft knee 6 dB)
+        const double T = thr[b], Rt = std::max(1.0, ratio[b]), Wk = 6, d = lvl - T;
+        if (2 * d < -Wk) return 0; if (2 * std::abs(d) <= Wk) { const double e = d + Wk / 2; return (1 / Rt - 1) * e * e / (2 * Wk); }
+        return (1 / Rt - 1) * d;
+    }
+public:
+    double reductionDb(int b) const { return gr[b]; }
+    void set(const FxSlot& f) override {
+        static const char* K[3][3] = { { "lthr", "lratio", "lgain" }, { "mthr", "mratio", "mgain" }, { "hthr", "hratio", "hgain" } };
+        for (int b = 0; b < 3; b++) { thr[b] = f.num(K[b][0], -20); ratio[b] = f.num(K[b][1], 3); gain[b] = f.num(K[b][2], 0); }
+        att = f.num("att", 0.01); rel = f.num("rel", 0.15); out = dbToGain(f.num("out", 0)); m.mix(1);   // no dry mix: the bands are phase-turned, a blend would comb
+        const std::string li = f.str("listen", "all"); listen = li == "low" ? 0 : li == "mid" ? 1 : li == "high" ? 2 : -1;
+        const double a = f.num("x1", 200), b2 = std::max(a * 1.5, f.num("x2", 3000));
+        if (a != x1 || b2 != x2) { x1 = a; x2 = b2; lp1.set(FilterType::Lowpass, sr, x1); hp1.set(FilterType::Highpass, sr, x1); lp2.set(FilterType::Lowpass, sr, x2); hp2.set(FilterType::Highpass, sr, x2); apL.set(FilterType::Lowpass, sr, x2); apH.set(FilterType::Highpass, sr, x2); }
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double ca = std::exp(-1 / (std::max(1e-4, att) * sr)), cr = std::exp(-1 / (std::max(1e-3, rel) * sr));
+        const double mk[3] = { dbToGain(gain[0]), dbToGain(gain[1]), dbToGain(gain[2]) };
+        for (int i = 0; i < n; i++) {
+            float lo[2] = { L[i], R[i] }, rest[2] = { L[i], R[i] };
+            lp1.tick(lo[0], lo[1]); hp1.tick(rest[0], rest[1]);
+            float a1[2] = { lo[0], lo[1] }, a2[2] = { lo[0], lo[1] }; apL.tick(a1[0], a1[1]); apH.tick(a2[0], a2[1]);   // low band through the 2nd crossover's all-pass
+            float band[3][2] = { { a1[0] + a2[0], a1[1] + a2[1] }, { rest[0], rest[1] }, { rest[0], rest[1] } };
+            lp2.tick(band[1][0], band[1][1]); hp2.tick(band[2][0], band[2][1]);
+            double ol = 0, orr = 0;
+            for (int b = 0; b < 3; b++) {
+                const double x = std::max(std::abs(band[b][0]), std::abs(band[b][1])), lv = x > 1e-9 ? 20 * std::log10(x) : -180, want = comp(b, lv);
+                gr[b] = want < gr[b] ? ca * gr[b] + (1 - ca) * want : cr * gr[b] + (1 - cr) * want;
+                if (listen >= 0 && b != listen) continue;
+                const double g = dbToGain(gr[b]) * mk[b]; ol += band[b][0] * g; orr += band[b][1] * g;
+            }
+            L[i] = (float)(L[i] * m.dry + ol * out * m.wet); R[i] = (float)(R[i] * m.dry + orr * out * m.wet);
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -887,6 +931,7 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "vocoder") return std::make_unique<Vocoder>();
     if (t == "meters") return std::make_unique<Meters>();
     if (t == "pitchfix") return std::make_unique<PitchFix>();
+    if (t == "multiband") return std::make_unique<Multiband>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 
