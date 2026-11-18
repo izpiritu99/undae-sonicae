@@ -313,6 +313,15 @@ inline void MixerView::FxRack::build() {
         } else if (auto* sp = fxSpec(f.type)) {
             for (auto& q : sp->params) {
                 const std::string k = q.k;
+                if (f.type == "tgate" && k == "steps") {   // the gate pattern as 16 step buttons, not a number
+                    const int bits = (int)f.num("steps", 46811);
+                    for (int st = 0; st < 16; st++) {
+                        auto* sb = addPart(new Btn(juce::String(st + 1))); sb->sm = true; sb->setOn((bits >> st) & 1); sb->setTooltip("Step " + juce::String(st + 1) + ": lit lets the sound through");
+                        sb->getProperties().set("role", "step"); sb->getProperties().set("slot", (int)i);
+                        sb->onClick = [this, bid, fid, st] { if (auto* x = o->doc.bus(bid)) for (auto& sl : x->fx) if (sl.id == fid) sl.p.set("steps", (double)((int)sl.num("steps", 46811) ^ (1 << st))); o->doc.commit(); };
+                    }
+                    continue;
+                }
                 if (!q.opts.empty()) {
                     struct Pick : juce::Component { Cap l; juce::ComboBox c; Pick() { addAndMakeVisible(l); addAndMakeVisible(c); l.setFont(font(FS * 0.78f)); } void resized() override { auto r = getLocalBounds(); l.setBounds(r.removeFromTop(16)); c.setBounds(r.removeFromTop(CTL())); } };
                     auto* pk = addPart(new Pick()); pk->l.setText(q.label, juce::dontSendNotification); pk->getProperties().set("role", "pick"); pk->getProperties().set("slot", (int)i);
@@ -355,6 +364,7 @@ inline void MixerView::FxRack::layout() {
             if (auto* k = dynamic_cast<Knob*>(p)) { w = k->idealWidth(); h = k->idealHeight(); }
             else if (role == "pick") { w = 150; h = 16 + c; }
             else if (role == "note") { w = W - 32; h = 70; }
+            else if (role == "step") { w = 38; h = c - 4; }
             else if (role == "meters") { w = W - 32; h = static_cast<MetersPanel*>(p)->idealHeight(); }
             else if (role == "plug") { auto* pp = static_cast<PlugPanel*>(p); pp->setSize(W - 32, 100); w = W - 32; h = pp->idealHeight(); }
             if (x + w > W - 16 && x > 16) { x = 16; cy += rowH + 6; rowH = 0; }

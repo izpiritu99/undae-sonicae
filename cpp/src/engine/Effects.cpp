@@ -1289,6 +1289,83 @@ public:
     }
 };
 
+// Trance gate: a 16-step on / off pattern at a note length locked to the song (its own clock when stopped) opens and
+// closes the level, by `depth`, with attack / release smoothing so the steps do not click.
+class TranceGate : public Effect {
+    std::string rate = "1/16"; int steps = 0xB6DB, len = 16; double depth = 1, att = 0.003, rel = 0.03, g = 1, own = 0; WetDry m;
+public:
+    void set(const FxSlot& f) override { rate = f.str("rate", "1/16"); steps = (int)f.num("steps", 0xB6DB); len = (int)f.num("len", 16); depth = f.num("depth", 1); att = f.num("att", 0.003); rel = f.num("rel", 0.03); m.mix(f.num("mix", 1)); }
+    void process(float* L, float* R, int n) override {
+        const double sb = std::max(1.0 / 16, noteBeats(rate)), bps = std::max(20.0, bpm) / 60; double pos = beat >= 0 ? beat : own;
+        const double ca = 1 - std::exp(-1 / (std::max(1e-4, att) * sr)), cr = 1 - std::exp(-1 / (std::max(1e-3, rel) * sr)); const int ln = std::clamp(len, 1, 16);
+        for (int i = 0; i < n; i++, pos += bps / sr) {
+            const int64_t k = (int64_t)std::floor(pos / sb + 1e-9); const int st = (int)(((k % ln) + ln) % ln);
+            const double tgt = ((steps >> st) & 1) ? 1.0 : 1 - depth; g += (tgt - g) * (tgt > g ? ca : cr);
+            L[i] = (float)(L[i] * (m.dry + g * m.wet)); R[i] = (float)(R[i] * (m.dry + g * m.wet));
+        }
+        own = pos;
+    }
+};
+
+// Multi-tap delay: four taps at note lengths (locked to the tempo), each with its own level and pan, a shared feedback
+// from the last tap and a tone filter on the repeats.
+class MultiTap : public Effect {
+    DelayLine dl, dr; Biquad2 lp; double fb = 0.3, tone = -1, lv[4] = {}, pn[4] = {}; std::string tm[4]; WetDry m; size_t cap = 0;
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); cap = (size_t)(8.5 * s); dl.init(cap); dr.init(cap); lp.setType(FilterType::Lowpass); tone = -1; }
+    void set(const FxSlot& f) override {
+        static const char* T[4] = { "t1", "t2", "t3", "t4" }, * V[4] = { "l1", "l2", "l3", "l4" }, * P[4] = { "p1", "p2", "p3", "p4" };
+        static const char* dt[4] = { "1/8", "1/4", "1/4 dotted", "1/2" }; static const double dl0[4] = { 0.8, 0.6, 0.45, 0.3 }, dp[4] = { -0.6, 0.6, -0.3, 0.3 };
+        for (int k = 0; k < 4; k++) { tm[k] = f.str(T[k], dt[k]); lv[k] = f.num(V[k], dl0[k]); pn[k] = f.num(P[k], dp[k]); }
+        fb = f.num("fb", 0.3); m.mix(f.num("mix", 0.3)); const double t = f.num("tone", 6000); if (t != tone) { tone = t; lp.set(sr, tone, Q_BW2, 0); }
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        double d[4]; double last = 1; for (int k = 0; k < 4; k++) { d[k] = clampd(std::max(1.0 / 16, noteBeats(tm[k])) * 60 / std::max(20.0, bpm) * sr, 16, (double)cap - 8); last = std::max(last, d[k]); }
+        for (int i = 0; i < n; i++) {
+            double ol = 0, orr = 0;
+            for (int k = 0; k < 4; k++) { const double v = 0.5 * (dl.read(d[k]) + dr.read(d[k])) * lv[k]; ol += v * std::cos((pn[k] + 1) * PI / 4) * 1.414; orr += v * std::sin((pn[k] + 1) * PI / 4) * 1.414; }
+            float fl = dl.read(last), fr = dr.read(last); lp.tick(fl, fr);
+            dl.push((float)(L[i] + fb * fl)); dr.push((float)(R[i] + fb * fr));
+            L[i] = (float)(L[i] * m.dry + ol * m.wet); R[i] = (float)(R[i] * m.dry + orr * m.wet);
+        }
+    }
+};
+
+// Utility: gain, phase flip per side, left / right swap, mono, pan and DC removal: the small jobs of a channel.
+class Utility : public Effect {
+    double gain = 1, pan = 0; bool invL = false, invR = false, swap = false, mono = false, dc = false; Biquad2 hp;
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); hp.setType(FilterType::Highpass); hp.set(s, 8, Q_BW2, 0); }
+    void set(const FxSlot& f) override {
+        gain = dbToGain(f.num("gain", 0)); pan = f.num("pan", 0); const std::string ph = f.str("phase", "normal"); invL = ph == "flip left" || ph == "flip both"; invR = ph == "flip right" || ph == "flip both";
+        swap = f.str("swap", "off") == "on"; mono = f.str("mono", "off") == "on"; dc = f.str("dc", "off") == "on";
+    }
+    void process(float* L, float* R, int n) override {
+        for (int i = 0; i < n; i++) {
+            float l = L[i], r = R[i]; if (swap) std::swap(l, r); if (invL) l = -l; if (invR) r = -r; if (mono) { const float mm = 0.5f * (l + r); l = r = mm; }
+            if (dc) hp.tick(l, r); l = (float)(l * gain); r = (float)(r * gain); if (pan != 0) panStereo(l, r, pan); L[i] = l; R[i] = r;
+        }
+    }
+};
+
+// Test tone: replaces (or adds to) the signal with a sine at `freq`, white or pink noise, or a logarithmic sweep from
+// 20 Hz to 20 kHz every `sweep` seconds, at `level` dBFS: for checking speakers, routing and meters.
+class TestTone : public Effect {
+    std::string kind = "sine"; double freq = 1000, level = 0.1, sweep = 10, ph = 0, t = 0, b0 = 0, b1 = 0, b2 = 0; bool add = false; Rng rng{ 99 };
+public:
+    void set(const FxSlot& f) override { kind = f.str("kind", "sine"); freq = f.num("freq", 1000); level = dbToGain(f.num("level", -20)); sweep = f.num("sweep", 10); add = f.str("mode", "replace") == "add"; }
+    void process(float* L, float* R, int n) override {
+        for (int i = 0; i < n; i++) {
+            double v;
+            if (kind == "white") v = rng.bi() * 0.577;
+            else if (kind == "pink") { const double w = rng.bi(); b0 = 0.99765 * b0 + w * 0.0990460; b1 = 0.96300 * b1 + w * 0.2965164; b2 = 0.57000 * b2 + w * 1.0526913; v = (b0 + b1 + b2 + w * 0.1848) * 0.18; }   // a published three-pole pinking filter
+            else { const double fq = kind == "sweep" ? 20 * std::pow(1000.0, std::fmod(t, sweep) / sweep) : freq; v = std::sin(2 * PI * ph) * 1.414; ph += fq / sr; ph -= std::floor(ph); t += 1 / sr; }
+            const float y = (float)(v * level * 0.7071); L[i] = add ? L[i] + y : y; R[i] = add ? R[i] + y : y;
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -1335,6 +1412,10 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "subgen") return std::make_unique<SubGen>();
     if (t == "dyneq") return std::make_unique<DynEq>();
     if (t == "irverb") return std::make_unique<IrReverb>();
+    if (t == "tgate") return std::make_unique<TranceGate>();
+    if (t == "multitap") return std::make_unique<MultiTap>();
+    if (t == "utility") return std::make_unique<Utility>();
+    if (t == "testtone") return std::make_unique<TestTone>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 

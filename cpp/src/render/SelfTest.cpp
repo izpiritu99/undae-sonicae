@@ -518,6 +518,20 @@ int main(int argc, char** argv) {
             check(found && third > 0.05 && first < third * 0.02 && after < third * 0.02 && outOfRange, "beat slicer: hits found at " + ons.toStdString() + "s (0, 0.25, 0.5, 0.75); key root+2 plays only the third slice (800 Hz "
                   + std::to_string(third) + ", 200 Hz " + std::to_string(first) + ") and stops at its end; keys outside the slices stay silent");
         }
+        // third round: trance gate, multi-tap delay, utility, test tone
+        {
+            auto tg = ui::newFx("tgate"); tg.p.set("steps", (double)0x5555); tg.p.set("depth", 1.0); tg.p.set("rel", 0.002); tg.p.set("att", 0.001); auto to = runTempo(tg, sine(1000, 0.5), sine(1000, 0.5)).first;   // 1/16 at 120 BPM: 0.125 s steps, every other one on
+            const double gOn = win(to, 0.51, 0.61), gOff = win(to, 0.635, 0.735);
+            auto mt = ui::newFx("multitap"); mt.p.set("fb", 0.0); mt.p.set("mix", 1.0); mt.p.set("tone", 18000.0); std::vector<float> clk((size_t)N, 0.f); clk[0] = 1;
+            auto mo = runTempo(mt, clk, clk); int taps = 0; for (double tt : { 0.25, 0.5, 0.75, 1.0 }) { const int c0 = (int)(tt * sr); if (c0 + 4 < N) { float pk = 0; for (int i = c0 - 4; i <= c0 + 4; i++) pk = std::max(pk, std::abs(mo.first[(size_t)i]) + std::abs(mo.second[(size_t)i])); taps += pk > 0.05f; } }
+            const double tap1L = std::abs(mo.first[12000]), tap1R = std::abs(mo.second[12000]);
+            auto ut = ui::newFx("utility"); ut.p.set("phase", juce::String("flip left")); ut.p.set("gain", -6.0); auto uo = runSt(ut, sine(300, 0.5), sine(300, 0.5));
+            const double sumUt = lvl(std::vector<float>(uo.first.size())) , flipOk = std::abs(uo.first[1000] + uo.second[1000]), gainUt = lvl(uo.second) - lvl(sine(300, 0.5)); (void)sumUt;
+            auto tt = ui::newFx("testtone"); tt.p.set("freq", 440.0); tt.p.set("level", -20.0); std::vector<float> z((size_t)N, 0.f); auto tto = runFx(tt, z); const double ttLv = lvl(tto);
+            check(gOn - gOff > 40 && taps == 3 && tap1L > 2 * tap1R && flipOk < 1e-6 && std::abs(gainUt + 6) < 0.05 && std::abs(ttLv + 23.01) < 0.1 && tone(tto, 440) > 0.05,
+                  "trance gate opens and shuts " + std::to_string(gOn - gOff) + " dB on alternate 1/16 steps; multi-tap: " + std::to_string(taps) + " taps inside 1 s at 1/8, 1/4, 3/8 (the 1/2 tap falls at 1 s), the first on the left; "
+                  "utility flips one side exactly and takes 6.0 dB; test tone at -20 dBFS peak reads " + std::to_string(ttLv) + " dB RMS (-23.0)");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

@@ -84,6 +84,17 @@ const std::vector<FxSpec>& fxSpecs() {
             { "att", "Attack", 0.001, 0.1, 0.005, true, {} }, { "rel", "Release", 0.02, 1, 0.12, true, {} } } },
         { "irverb", "IR reverb", { { "ir", "Impulse", 0, 0, 0, false, { "@samples" } }, { "pre", "Pre-delay", 0, 200, 0, false, {} }, { "lo", "Low cut", 20, 1000, 20, true, {} },
             { "hi", "High cut", 1000, 20000, 20000, true, {} }, { "gain", "Wet gain", -24, 12, 0, false, {} }, { "mix", "Mix", 0, 1, 0.3, false, {} } } },
+        { "tgate", "Trance gate", { { "rate", "Rate", 0, 0, 0, false, { "1/16", "1/8", "1/32", "1/8 triplet", "1/4" } }, { "steps", "Pattern", 0, 65535, 46811, false, {} }, { "len", "Steps", 1, 16, 16, false, {} },
+            { "depth", "Depth", 0, 1, 1, false, {} }, { "att", "Attack", 0.0005, 0.05, 0.003, true, {} }, { "rel", "Release", 0.002, 0.3, 0.03, true, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "multitap", "Multi-tap delay", { { "t1", "Tap 1", 0, 0, 0, false, { "1/8", "1/16", "1/8 triplet", "1/8 dotted", "1/4", "1/4 dotted", "1/2", "1 bar" } }, { "l1", "Level 1", 0, 1, 0.8, false, {} }, { "p1", "Pan 1", -1, 1, -0.6, false, {} },
+            { "t2", "Tap 2", 0, 0, 0, false, { "1/4", "1/16", "1/8", "1/8 triplet", "1/8 dotted", "1/4 dotted", "1/2", "1 bar" } }, { "l2", "Level 2", 0, 1, 0.6, false, {} }, { "p2", "Pan 2", -1, 1, 0.6, false, {} },
+            { "t3", "Tap 3", 0, 0, 0, false, { "1/4 dotted", "1/16", "1/8", "1/8 triplet", "1/8 dotted", "1/4", "1/2", "1 bar" } }, { "l3", "Level 3", 0, 1, 0.45, false, {} }, { "p3", "Pan 3", -1, 1, -0.3, false, {} },
+            { "t4", "Tap 4", 0, 0, 0, false, { "1/2", "1/16", "1/8", "1/8 triplet", "1/8 dotted", "1/4", "1/4 dotted", "1 bar" } }, { "l4", "Level 4", 0, 1, 0.3, false, {} }, { "p4", "Pan 4", -1, 1, 0.3, false, {} },
+            { "fb", "Feedback", 0, 0.9, 0.3, false, {} }, { "tone", "Tone", 500, 18000, 6000, true, {} }, { "mix", "Mix", 0, 1, 0.3, false, {} } } },
+        { "utility", "Utility", { { "phase", "Phase", 0, 0, 0, false, { "normal", "flip left", "flip right", "flip both" } }, { "swap", "Swap L/R", 0, 0, 0, false, { "off", "on" } }, { "mono", "Mono", 0, 0, 0, false, { "off", "on" } },
+            { "dc", "Remove DC", 0, 0, 0, false, { "off", "on" } }, { "gain", "Gain", -36, 24, 0, false, {} }, { "pan", "Pan", -1, 1, 0, false, {} } } },
+        { "testtone", "Test tone", { { "kind", "Signal", 0, 0, 0, false, { "sine", "sweep", "pink", "white" } }, { "mode", "Signal is", 0, 0, 0, false, { "replace", "add" } }, { "freq", "Freq Hz", 20, 20000, 1000, true, {} },
+            { "level", "Level dB", -60, 0, -20, false, {} }, { "sweep", "Sweep s", 2, 60, 10, true, {} } } },
     };
     return v;
 }
@@ -144,11 +155,11 @@ const std::vector<std::pair<const char*, std::vector<std::string>>>& fxCategorie
         { "EQ & filter", { "eq", "peq", "dyneq", "filter", "autofilter" } },
         { "Dynamics", { "comp", "multiband", "limiter", "gate", "deess", "trans", "duck" } },
         { "Distortion & colour", { "sat", "dist", "amp", "crush", "lofi", "subgen" } },
-        { "Space", { "reverb", "fdn", "irverb", "delay", "echo" } },
+        { "Space", { "reverb", "fdn", "irverb", "delay", "echo", "multitap" } },
         { "Modulation", { "chorus", "phaser", "flanger", "ringmod", "fshift", "rotary", "autopan" } },
         { "Pitch & voice", { "pitchfix", "pitchshift", "doubler", "vocoder" } },
-        { "Stereo & creative", { "imager", "glitch" } },
-        { "Meters", { "meters" } },
+        { "Stereo & creative", { "imager", "glitch", "tgate" } },
+        { "Utility & meters", { "utility", "meters", "testtone" } },
     };
     return v;
 }
