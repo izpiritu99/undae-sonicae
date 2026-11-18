@@ -634,6 +634,62 @@ public:
     }
 };
 
+// Vocoder (channel vocoder, filter bank): sits on the voice's bus. The voice (modulator) is split into `bands` log-spaced
+// bands between `lo` and `hi` Hz (two cascaded band-passes each); an envelope follower per band sets the level of the
+// same band of the carrier, so the carrier takes on the voice's changing spectrum. The carrier is another bus (side
+// chain) or a built-in buzz (band-limited saw at `pitch` with a little noise). `shift` moves the carrier bands up or
+// down (formant shift); `noise` adds hiss where the voice has sibilance above 5 kHz, so consonants stay clear.
+class Vocoder : public Effect {
+    static constexpr int MB = 32;
+    Biquad mod1[MB], mod2[MB]; Biquad2 car1[MB], car2[MB]; double env[MB] = {};
+    Biquad sibHp; Biquad2 hissHp; double sibEnv = 0, ph = 0;
+    std::string src; int nb = -1; double lo = -1, hi = -1, qm = -1, shift = -99, att = 0.004, rel = 0.04, noise = 0.3, pitch = 48, out = 1; WetDry m;
+    std::vector<float> kl, kr; bool haveSide = false; const WaveTable* saw = nullptr; Rng rng{ 77 };
+    void design() {
+        const double r = std::pow(hi / lo, 1.0 / std::max(1, nb - 1)), q = qm / (std::sqrt(r) - 1 / std::sqrt(r)), sh = std::pow(2.0, shift);
+        for (int k = 0; k < nb; k++) {
+            const double f = lo * std::pow(r, k), fc = std::min(f * sh, sr * 0.45);
+            for (Biquad* b : { &mod1[k], &mod2[k] }) { b->type = FilterType::Bandpass; b->set(sr, f, q, 0); }
+            for (Biquad2* b : { &car1[k], &car2[k] }) { b->setType(FilterType::Bandpass); b->set(sr, fc, q, 0); }
+        }
+    }
+public:
+    void prepare(double s, int b) override {
+        Effect::prepare(s, b); kl.assign((size_t)std::max(b, 4096), 0.f); kr.assign(kl.size(), 0.f); saw = &WaveTable::get("sawtooth"); nb = -1;
+        sibHp.type = FilterType::Highpass; sibHp.set(s, 5000, Q_BW2, 0); hissHp.setType(FilterType::Highpass); hissHp.set(s, 5000, Q_BW2, 0);
+    }
+    void set(const FxSlot& f) override {
+        src = f.str("src", ""); att = f.num("att", 0.004); rel = f.num("rel", 0.04); noise = f.num("noise", 0.3); pitch = f.num("pitch", 48); out = dbToGain(f.num("out", 0)); m.mix(f.num("mix", 1));
+        const int b = (int)clampd(std::round(f.num("bands", 20)), 4, MB); const double l = f.num("lo", 100), h = std::max(l * 2, f.num("hi", 8000)), q = f.num("q", 1), s = f.num("shift", 0);
+        if (b != nb || l != lo || h != hi || q != qm || s != shift) { nb = b; lo = l; hi = h; qm = q; shift = s; design(); }
+    }
+    std::string sideSource() const override { return src; }
+    void side(const float* L, const float* R, int n) override { std::copy(L, L + n, kl.begin()); std::copy(R, R + n, kr.begin()); haveSide = true; }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const bool ext = haveSide && !src.empty(); haveSide = false;
+        const double ca = std::exp(-1 / (std::max(1e-4, att) * sr)), cr = std::exp(-1 / (std::max(1e-3, rel) * sr)), f0 = mtof(pitch);
+        const double g = out * 2.5 * std::sqrt((double)nb);   // band envelopes are each a fraction of the voice's level
+        for (int i = 0; i < n; i++) {
+            const double v = 0.5 * (L[i] + R[i]);
+            float cl, cr2;
+            if (ext) { cl = kl[(size_t)i]; cr2 = kr[(size_t)i]; }
+            else { const float z = saw->read(ph, f0, sr) * 0.5f + (float)(rng.bi() * 0.04); ph += f0 / sr; ph -= std::floor(ph); cl = cr2 = z; }
+            double ol = 0, orr = 0;
+            for (int k = 0; k < nb; k++) {
+                const double x = std::abs(mod2[k].tick(mod1[k].tick(v)));
+                env[k] = x > env[k] ? ca * env[k] + (1 - ca) * x : cr * env[k] + (1 - cr) * x;
+                float a = cl, b = cr2; car1[k].tick(a, b); car2[k].tick(a, b);
+                ol += a * env[k]; orr += b * env[k];
+            }
+            const double sx = std::abs(sibHp.tick(v)); sibEnv = sx > sibEnv ? ca * sibEnv + (1 - ca) * sx : cr * sibEnv + (1 - cr) * sx;
+            float hl = (float)rng.bi(), hr = (float)rng.bi(); hissHp.tick(hl, hr);
+            ol = ol * g + hl * sibEnv * noise * 2; orr = orr * g + hr * sibEnv * noise * 2;
+            L[i] = (float)(L[i] * m.dry + ol * m.wet); R[i] = (float)(R[i] * m.dry + orr * m.wet);
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -663,6 +719,7 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "imager") return std::make_unique<Imager>();
     if (t == "echo") return std::make_unique<EchoLine>();
     if (t == "glitch") return std::make_unique<Glitch>();
+    if (t == "vocoder") return std::make_unique<Vocoder>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 

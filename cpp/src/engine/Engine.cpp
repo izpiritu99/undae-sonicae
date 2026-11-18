@@ -381,7 +381,7 @@ std::string Engine::structureKey(const Project& p) {
     std::string k;
     for (auto& c : p.channels) { k += c.id + "/" + c.type + "/" + c.bus; if (c.type == "plugin") k += "/" + c.plug.getProperty("path", "").toString().toStdString() + "#" + c.plug.getProperty("pid", "").toString().toStdString(); k += ";"; }
     k += "|";
-    for (auto& b : p.buses) { k += b.id + "/" + b.kind + ":"; for (auto& f : b.fx) k += f.id + "=" + f.type + (f.type == "duck" || f.type == "gate" ? "<" + f.str("src", "") : "") + (f.type == "plugin" ? "@" + f.str("path", "") + "#" + f.str("pid", "") : "") + ","; k += ">"; for (auto& s : b.sends) k += s.to + "+"; k += ";"; }
+    for (auto& b : p.buses) { k += b.id + "/" + b.kind + ":"; for (auto& f : b.fx) k += f.id + "=" + f.type + (f.type == "duck" || f.type == "gate" || f.type == "vocoder" ? "<" + f.str("src", "") : "") + (f.type == "plugin" ? "@" + f.str("path", "") + "#" + f.str("pid", "") : "") + ","; k += ">"; for (auto& s : b.sends) k += s.to + "+"; k += ";"; }
     return k;
 }
 

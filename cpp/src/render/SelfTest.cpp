@@ -232,6 +232,23 @@ int main(int argc, char** argv) {
         auto gv = gr; gv.p.set("repeat", 0.0); gv.p.set("reverse", 1.0); auto vo = runTempo(gv, mus, mus).first; float revD = 0; for (int o = 200; o < 11800; o++) revD = std::max(revD, std::abs(vo[(size_t)(24000 + o)] - mus[(size_t)(24000 - 1 - o)]));
         auto gd = ui::newFx("glitch"); gd.p.set("stop", 0.3); auto d1 = runTempo(gd, mus, mus).first, d2 = runTempo(gd, mus, mus).first; bool same = d1 == d2, fin = true; for (float v : d1) fin &= std::isfinite(v);
         check(repD < 1e-4f && revD < 1e-4f && same && fin, "glitch: a repeat step loops a 1/32 slice (difference " + std::to_string(repD) + "), a reverse step plays the step before backwards (" + std::to_string(revD) + "), and the same song gives the same glitches every time");
+
+        // vocoder: the carrier takes on the voice's spectrum, and is silent when the voice is
+        {
+            std::vector<float> voice((size_t)N); for (int i = 0; i < N; i++) voice[(size_t)i] = (float)(i < N / 2 ? 0.3 * std::sin(2 * 3.14159265358979 * 1000 * i / sr) : 0.0);
+            auto vc = ui::newFx("vocoder"); vc.p.set("noise", 0.0);   // built-in buzz at note 48 (130.8 Hz): harmonic 8 is 1046 Hz, harmonic 3 is 392 Hz
+            auto vo2 = runSt(vc, voice, voice).first;
+            std::vector<float> fh2((size_t)N, 0.f); std::copy(vo2.begin() + N / 4, vo2.begin() + N / 2, fh2.begin() + N / 2);   // put 0.25-0.5 s where tone() looks
+            const double near = tone(fh2, 1046.5), far = tone(fh2, 392.4);
+            const double loud = win(vo2, 0.25, 0.5), silent = win(vo2, 0.75, 1.0);
+            // carrier from another bus (side chain): 440 Hz + 3 kHz; a 3 kHz voice keeps 3 kHz and drops 440 Hz
+            std::vector<float> car((size_t)N), v3 = sine(3000, 0.3); for (int i = 0; i < N; i++) car[(size_t)i] = (float)(0.3 * std::sin(2 * 3.14159265358979 * 440 * i / sr) + 0.3 * std::sin(2 * 3.14159265358979 * 3000 * i / sr));
+            auto vs = vc; vs.p.set("src", juce::String("synth")); auto so = runSt(vs, v3, v3, &car).first;
+            const double keep = tone(so, 3000), drop = tone(so, 440);
+            check(near > 10 * far && silent < loud - 60 && keep > 30 * drop && loud > -40,
+                  "vocoder: a 1 kHz voice brings out the buzz's 1046 Hz harmonic " + std::to_string(20 * std::log10(near / std::max(1e-12, far))) + " dB over 392 Hz, silence in gives "
+                  + std::to_string(silent - loud) + " dB, a side-chained carrier keeps the voice's 3 kHz " + std::to_string(20 * std::log10(keep / std::max(1e-12, drop))) + " dB over 440 Hz (level " + std::to_string(loud) + " dB)");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

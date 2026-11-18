@@ -45,6 +45,10 @@ const std::vector<FxSpec>& fxSpecs() {
         { "glitch", "Glitch", { { "grid", "Every", 0, 0, 0, false, { "1/8", "1/16", "1/4", "1/2" } }, { "slice", "Repeat size", 0, 0, 0, false, { "1/32", "1/16", "1/8", "1/64" } },
             { "repeat", "Repeat", 0, 1, 0.3, false, {} }, { "reverse", "Reverse", 0, 1, 0.15, false, {} }, { "stop", "Tape stop", 0, 1, 0.1, false, {} }, { "gate", "Chop", 0, 1, 0.1, false, {} },
             { "seed", "Pattern", 1, 64, 1, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "vocoder", "Vocoder", { { "src", "Carrier", 0, 0, 0, false, { "@buses" } }, { "pitch", "Buzz note", 24, 72, 48, false, {} }, { "bands", "Bands", 4, 32, 20, false, {} },
+            { "lo", "Low Hz", 60, 400, 100, true, {} }, { "hi", "High Hz", 2000, 12000, 8000, true, {} }, { "q", "Band width", 0.5, 2, 1, false, {} }, { "shift", "Formant", -1, 1, 0, false, {} },
+            { "att", "Attack", 0.001, 0.05, 0.004, true, {} }, { "rel", "Release", 0.01, 0.4, 0.04, true, {} }, { "noise", "Hiss", 0, 1, 0.3, false, {} },
+            { "out", "Output", -12, 24, 0, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
     };
     return v;
 }

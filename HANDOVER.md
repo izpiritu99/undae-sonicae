@@ -889,6 +889,14 @@ and `Effect::beat` (quarter notes since the song start, -1 when stopped), set by
   reverse step is the previous step backwards, two renders are identical.
 Next in the order: the vocoder (10), the analyser and meters (11), pitch correction (12).
 
+- **Vocoder** (`vocoder`, item 10), self-test 34 / 34: goes on the voice's bus; carrier from another bus through the
+  side chain (in the graph key, like the gate) or a built-in buzz at a chosen note; 4-32 bands between Low and High Hz
+  (4th-order band-passes), band width, formant shift +-1 octave, attack / release, hiss for sibilance above 5 kHz.
+  Checks: a 1 kHz voice brings out the buzz harmonic at 1046 Hz 26 dB over 392 Hz; silence in is silence out (-65 dB);
+  a side-chained carrier keeps the voice's 3 kHz 47 dB over 440 Hz. A single-tone voice comes out about 9 dB quieter
+  than it went in (Output makes up for it); real speech spreads over more bands.
+Next: the analyser and meters (11), pitch correction (12), multiband compressor (13).
+
 ## Linux catch-up list (for later; work is Windows-only for now)
 
 The owner is working on Windows only for now (Android work is fine from Windows: the SDK, Android Studio, the emulator
@@ -903,13 +911,13 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (33 after the tempo effects; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (34 after the vocoder; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
 4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
-   `imager`, `echo`, `glitch`). Until then, do not open projects that use them in the Electron app.
+   `imager`, `echo`, `glitch`, `vocoder`). Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).
