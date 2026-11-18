@@ -875,3 +875,31 @@ Second batch (2026-11-17, Windows), self-test 30 / 30:
 - **Stereo width** (`imager`, item 6): width 0-200 %, bass mono below a frequency (LR4 high-pass on the side), Haas
   widening, balance. Check: the 60 Hz side drops 32 dB with bass mono at 150 Hz, 2 kHz untouched; width 0 % is mono.
 Next in the order: the tempo-aware delay (8) and glitch / stutter (9), then the vocoder (10).
+
+## Linux catch-up list (for later; work is Windows-only for now)
+
+The owner is working on Windows only for now. Nothing below needs doing until they go back to the laptop. Keep this
+list current as Windows work adds to it.
+
+State when the list was started: the laptop repository is `~/Desktop/New Folder/undae-sonicae`, its `main` at 753c525
+(the first four built-in effects), built with JUCE from the stick's zip, self-test 27 / 27 on Linux. It has the stick as
+the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
+
+1. **Bring the code over**: `git fetch tings windows`, then `git merge FETCH_HEAD` in the laptop repository (or copy
+   the branch some other way if the stick is not used).
+2. **Build and self-test**: `cmake --build cpp/build`, then
+   `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
+   pass (30 at 7264170; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
+   the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
+   Wine). Then `undae-plugtest` with the usual Wine plug-ins.
+4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
+   types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
+   `imager`). Until then, do not open projects that use them in the Electron app.
+5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
+6. **Android**: rebuild the APK and check that the new effects run there (the saturator uses JUCE's
+   `dsp::Oversampling`; check CPU on the phone).
+7. **Branches**: the laptop's `main` was fast-forwarded to `windows`. Decide whether `main` simply follows `windows`
+   from now on, and push the result back to wherever the canonical copy lives.
+8. **Anything else added on Windows**: each later Windows change that touches platform code (`PluginHost.cpp`,
+   `Mp3.cpp`, `AppMain.cpp` CPU / RAM readout, CMake) gets a line here.
