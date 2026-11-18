@@ -1051,6 +1051,17 @@ Second round done.
 - **Speed check** (self-test 52 / 52): every built-in effect must process a stereo mix at least 20x faster than real time
   (48 kHz, 512-sample blocks). The saturator and amp now oversample with JUCE polyphase IIR half-band filters
   instead of FIR (the amp went from 21x to well clear); the slowest is now the original convolution reverb (22x).
+- **Fourth-round effects** (self-test 53 / 53):
+  - **Spectral gate** (`specgate`): 2048-point STFT at 75 % overlap; each bin's power is smoothed (quick rise, slow
+    fall), its floor is the slowly rising minimum plus 5 dB, and bins less than `thr` dB over it are reduced (square-
+    root curve, smoothed across frames). Latency 1536 samples, dry delayed to match. Check: steady hiss down 14 dB, a
+    1 kHz tone in the hiss kept within 0.3 dB.
+  - **Ensemble** (`ensemble`): six chorus voices on 7-25 ms delays, two LFOs each, spread wide. Check: decorrelates
+    the sides.
+  - **Scratch** (`scratch`): the recent sound swung back and forth like a record under a hand (sine or zigzag motion,
+    depth in beats, locked to the song). Check: 97 % of a steady tone is moved off its pitch.
+- **Android**: not built this round. The NDK (28.1, several hundred MB) is not installed on this PC and Gradle would
+  download it; that needs the owner's go-ahead first.
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -1066,7 +1077,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (52 with the speed check; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (53 after the fourth-round effects; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
@@ -1074,7 +1085,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    over the effect table; settings kept, not listed in its menus), so projects using the native effects open and play
    there without them. Still to do, if wanted: port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
-   `autopan`, `lofi`, `pitchshift`, `doubler`, `autofilter`, `amp`, `subgen`, `dyneq`, `irverb`, `tgate`, `multitap`, `utility`, `testtone`). The synth's "wt:" wave names and the five wavetable presets also need porting to
+   `autopan`, `lofi`, `pitchshift`, `doubler`, `autofilter`, `amp`, `subgen`, `dyneq`, `irverb`, `tgate`, `multitap`, `utility`, `testtone`, `specgate`, `ensemble`, `scratch`). The synth's "wt:" wave names and the five wavetable presets also need porting to
    `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp", "slice" / "slices" to the Electron engine. Until then the Electron app ignores them (the project opens, but saving it from there may
    drop those settings: not checked).
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).

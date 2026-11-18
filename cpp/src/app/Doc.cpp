@@ -95,6 +95,11 @@ const std::vector<FxSpec>& fxSpecs() {
             { "dc", "Remove DC", 0, 0, 0, false, { "off", "on" } }, { "gain", "Gain", -36, 24, 0, false, {} }, { "pan", "Pan", -1, 1, 0, false, {} } } },
         { "testtone", "Test tone", { { "kind", "Signal", 0, 0, 0, false, { "sine", "sweep", "pink", "white" } }, { "mode", "Signal is", 0, 0, 0, false, { "replace", "add" } }, { "freq", "Freq Hz", 20, 20000, 1000, true, {} },
             { "level", "Level dB", -60, 0, -20, false, {} }, { "sweep", "Sweep s", 2, 60, 10, true, {} } } },
+        { "specgate", "Spectral gate", { { "thr", "Above floor dB", 0, 24, 6, false, {} }, { "reduce", "Reduce dB", 0, 48, 18, false, {} }, { "smooth", "Smooth", 0, 1, 0.5, false, {} },
+            { "learn", "Floor rise", 0.2, 6, 1, true, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "ensemble", "Ensemble", { { "rate", "Rate", 0.05, 4, 0.6, true, {} }, { "depth", "Depth", 0, 1, 0.6, false, {} }, { "spread", "Spread", 0, 1, 1, false, {} }, { "mix", "Mix", 0, 1, 0.5, false, {} } } },
+        { "scratch", "Scratch", { { "rate", "Swing", 0, 0, 0, false, { "1/8", "1/16", "1/4", "1/2", "1 bar" } }, { "shape", "Hand", 0, 0, 0, false, { "sine", "zigzag" } },
+            { "depth", "Depth beats", 0.02, 1, 0.25, true, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
     };
     return v;
 }
@@ -153,12 +158,12 @@ std::vector<us::FxSlot> chainSlots(const FxChain& c) {
 const std::vector<std::pair<const char*, std::vector<std::string>>>& fxCategories() {
     static const std::vector<std::pair<const char*, std::vector<std::string>>> v = {
         { "EQ & filter", { "eq", "peq", "dyneq", "filter", "autofilter" } },
-        { "Dynamics", { "comp", "multiband", "limiter", "gate", "deess", "trans", "duck" } },
+        { "Dynamics", { "comp", "multiband", "limiter", "gate", "specgate", "deess", "trans", "duck" } },
         { "Distortion & colour", { "sat", "dist", "amp", "crush", "lofi", "subgen" } },
         { "Space", { "reverb", "fdn", "irverb", "delay", "echo", "multitap" } },
-        { "Modulation", { "chorus", "phaser", "flanger", "ringmod", "fshift", "rotary", "autopan" } },
+        { "Modulation", { "chorus", "ensemble", "phaser", "flanger", "ringmod", "fshift", "rotary", "autopan" } },
         { "Pitch & voice", { "pitchfix", "pitchshift", "doubler", "vocoder" } },
-        { "Stereo & creative", { "imager", "glitch", "tgate" } },
+        { "Stereo & creative", { "imager", "glitch", "tgate", "scratch" } },
         { "Utility & meters", { "utility", "meters", "testtone" } },
     };
     return v;

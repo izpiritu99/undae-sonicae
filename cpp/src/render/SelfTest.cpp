@@ -532,6 +532,23 @@ int main(int argc, char** argv) {
                   "trance gate opens and shuts " + std::to_string(gOn - gOff) + " dB on alternate 1/16 steps; multi-tap: " + std::to_string(taps) + " taps inside 1 s at 1/8, 1/4, 3/8 (the 1/2 tap falls at 1 s), the first on the left; "
                   "utility flips one side exactly and takes 6.0 dB; test tone at -20 dBFS peak reads " + std::to_string(ttLv) + " dB RMS (-23.0)");
         }
+        // fourth round: spectral gate takes hiss down under a tone that keeps its level; ensemble spreads; scratch swoops
+        {
+            std::vector<float> hiss((size_t)(2 * N)); us::Rng hr(5); for (auto& v : hiss) v = (float)(hr.bi() * 0.01);
+            std::vector<float> sigH = hiss; for (int i = N; i < 2 * N; i++) sigH[(size_t)i] += (float)(0.3 * std::sin(2 * 3.14159265358979 * 1000 * i / sr));   // 1 s hiss alone, then hiss + tone
+            auto sgf = ui::newFx("specgate"); auto e = us::makeEffect("specgate"); e->prepare(sr, 512); e->set(sgf); auto Lg = sigH, Rg = sigH;
+            for (int o = 0; o < 2 * N; o += 512) e->process(Lg.data() + o, Rg.data() + o, std::min(512, 2 * N - o));
+            auto wv = [&](const std::vector<float>& v, double a, double b) { double s2 = 0; for (int i = (int)(a * sr); i < (int)(b * sr); i++) s2 += (double)v[(size_t)i] * v[(size_t)i]; return 10 * std::log10(s2 / ((b - a) * sr) + 1e-30); };
+            const double hissDown = wv(Lg, 0.6, 0.95) - wv(hiss, 0.6 - 2048 / sr, 0.95 - 2048 / sr);
+            std::vector<float> lagged((size_t)(2 * N), 0.f); for (int i = 1536; i < 2 * N; i++) lagged[(size_t)i] = sigH[(size_t)(i - 1536)];
+            const double toneKept = wv(Lg, 1.5, 1.9) - wv(lagged, 1.5, 1.9);
+            auto en = ui::newFx("ensemble"); auto eo = runSt(en, sine(440, 0.4), sine(440, 0.4)); double lr = 0, ll = 0, rr = 0; for (int i = N / 2; i < N; i++) { lr += (double)eo.first[(size_t)i] * eo.second[(size_t)i]; ll += (double)eo.first[(size_t)i] * eo.first[(size_t)i]; rr += (double)eo.second[(size_t)i] * eo.second[(size_t)i]; }
+            const double ecorr = lr / std::sqrt(ll * rr + 1e-30);
+            auto sc = ui::newFx("scratch"); auto so3 = runTempo(sc, sine(1000, 0.4), sine(1000, 0.4)).first; bool sfin = true; for (float v : so3) sfin &= std::isfinite(v);
+            const double moved = 1 - tone(so3, 1000) / 0.4;   // the swinging read speed smears the steady tone across other pitches
+            check(hissDown < -12 && std::abs(toneKept) < 1.5 && ecorr < 0.9 && sfin && moved > 0.3, "spectral gate takes steady hiss down " + std::to_string(-hissDown) + " dB and keeps a tone within " + std::to_string(toneKept)
+                  + " dB; ensemble decorrelates the sides (" + std::to_string(ecorr) + "); scratch swoops the pitch (" + std::to_string((int)(moved * 100)) + " % of a steady tone moved off its pitch)");
+        }
         // speed: every built-in effect, on 2 s of a stereo mix in 512-sample blocks, runs at least 20 times faster than real time
         {
             std::vector<float> mL((size_t)(2 * N)), mR((size_t)(2 * N)); for (int i = 0; i < 2 * N; i++) { mL[(size_t)i] = (float)(0.3 * std::sin(i * 0.0571) + 0.2 * std::sin(i * 0.31)); mR[(size_t)i] = (float)(0.3 * std::sin(i * 0.0573) + 0.15 * std::sin(i * 0.47)); }

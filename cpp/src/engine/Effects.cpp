@@ -1366,6 +1366,107 @@ public:
     }
 };
 
+// Spectral gate: a short-time Fourier transform (2048-point Hann frames, 4 per frame length) tracks the noise floor of
+// every frequency bin (the slowly rising minimum of its smoothed power, plus 5 dB); bins less than `thr` dB above
+// that floor are turned down by
+// `reduce` dB, with smoothing across frames so the gating does not warble. Hiss and hum come down while the
+// sound itself passes. Latency 2048 samples (the dry path is delayed to match).
+class SpectralGate : public Effect {
+    static constexpr int FN = 2048, HOP = 512, NB = FN / 2 + 1;
+    juce::dsp::FFT fft{ 11 }; std::vector<float> win, inb[2], outb[2], work, gainB; std::vector<double> floorDb, powS; int pos = 0; DelayLine dl, dr;
+    double thr = 6, reduce = 18, smoothK = 0.5, learn = 1; WetDry m; int64_t frames = 0;
+    void frame() {
+        // analyse the mono sum for the gains, apply them to each channel
+        work.assign(2 * FN, 0.f); for (int i = 0; i < FN; i++) work[(size_t)i] = 0.5f * (inb[0][(size_t)i] + inb[1][(size_t)i]) * win[(size_t)i];
+        fft.performFrequencyOnlyForwardTransform(work.data(), true);
+        const double rise = learn * HOP / (sr * 1.5);   // the floor may rise about learn dB per 1.5 s
+        for (int b = 0; b < NB; b++) {
+            double& pw = powS[(size_t)b]; const double mg = work[(size_t)b]; pw = frames ? (mg * mg > pw ? 0.6 * pw + 0.4 * mg * mg : 0.85 * pw + 0.15 * mg * mg) : mg * mg;   // rises quickly (hits), falls slowly   // a few frames of power smoothing: noise wobbles less
+            const double db = 10 * std::log10(pw + 1e-18);
+            double& fl = floorDb[(size_t)b]; if (frames < 4 || db < fl) fl = db; else fl += std::min(db - fl, 6.0 * rise);
+            const double over = db - (fl + 5), tgt = over >= thr ? 1.0 : dbToGain(-reduce * std::sqrt(1 - std::max(0.0, over) / thr));
+            gainB[(size_t)b] += (float)((tgt - gainB[(size_t)b]) * (tgt > gainB[(size_t)b] ? 0.9 : smoothK));
+        }
+        for (int c = 0; c < 2; c++) {
+            work.assign(2 * FN, 0.f); for (int i = 0; i < FN; i++) work[(size_t)i] = inb[c][(size_t)i] * win[(size_t)i];
+            fft.performRealOnlyForwardTransform(work.data(), true);
+            for (int b = 0; b < NB; b++) { work[(size_t)(2 * b)] *= gainB[(size_t)b]; work[(size_t)(2 * b + 1)] *= gainB[(size_t)b]; }
+            fft.performRealOnlyInverseTransform(work.data());
+            for (int i = 0; i < FN; i++) outb[c][(size_t)i] += work[(size_t)i] * win[(size_t)i] * (2.0f / 3.0f);   // Hann^2 at 75 % overlap sums to 1.5
+        }
+        frames++;
+    }
+public:
+    void prepare(double s, int b) override {
+        Effect::prepare(s, b); win.resize(FN); for (int i = 0; i < FN; i++) win[(size_t)i] = (float)(0.5 - 0.5 * std::cos(2 * PI * i / FN));
+        for (int c = 0; c < 2; c++) { inb[c].assign(FN, 0.f); outb[c].assign(FN, 0.f); } floorDb.assign(NB, -120.0); powS.assign(NB, 0.0); gainB.assign(NB, 1.f); pos = 0; frames = 0;
+        dl.init(FN + 8); dr.init(FN + 8);
+    }
+    void set(const FxSlot& f) override { thr = f.num("thr", 6); reduce = f.num("reduce", 18); smoothK = 1 - f.num("smooth", 0.5) * 0.9; learn = f.num("learn", 1); m.mix(f.num("mix", 1)); }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        for (int i = 0; i < n; i++) {
+            float* io[2] = { L + i, R + i };
+            dl.push(L[i]); dr.push(R[i]);
+            float y[2];
+            for (int c = 0; c < 2; c++) { inb[c][(size_t)(FN - HOP + pos)] = *io[c]; y[c] = outb[c][(size_t)pos]; }
+            if (++pos == HOP) {
+                pos = 0; frame();
+                for (int c = 0; c < 2; c++) { std::copy(inb[c].begin() + HOP, inb[c].end(), inb[c].begin()); std::copy(outb[c].begin() + HOP, outb[c].end(), outb[c].begin()); std::fill(outb[c].end() - HOP, outb[c].end(), 0.f); }
+            }
+            const double latency = FN - HOP;   // the output above is FN - HOP samples behind the input
+            L[i] = (float)(dl.read(latency) * m.dry + y[0] * m.wet); R[i] = (float)(dr.read(latency) * m.dry + y[1] * m.wet);
+        }
+    }
+};
+
+// Ensemble: six chorus voices on delays of 7-25 ms, each swept by two slow LFOs at different rates and phases, spread
+// across the stereo field: the thick, shimmering string-machine sound.
+class Ensemble : public Effect {
+    DelayLine d; double ph[6] = {}, rate = 0.6, depth = 0.6, spread = 1; WetDry m;
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); d.init((size_t)(0.05 * s) + 8); for (int k = 0; k < 6; k++) ph[k] = k / 6.0; }
+    void set(const FxSlot& f) override { rate = f.num("rate", 0.6); depth = f.num("depth", 0.6); spread = f.num("spread", 1); m.mix(f.num("mix", 0.5)); }
+    void process(float* L, float* R, int n) override {
+        static const double base[6] = { 7, 10, 13, 16, 20, 24 }, rmul[6] = { 1, 1.13, 0.87, 1.27, 0.77, 1.41 }, pans[6] = { -1, 1, -0.6, 0.6, -0.2, 0.2 };
+        for (int i = 0; i < n; i++) {
+            d.push(0.5f * (L[i] + R[i])); double ol = 0, orr = 0;
+            for (int k = 0; k < 6; k++) {
+                ph[k] += rate * rmul[k] / sr; ph[k] -= std::floor(ph[k]);
+                const double mod = 0.7 * std::sin(2 * PI * ph[k]) + 0.3 * std::sin(2 * PI * ph[k] * 5.3 + k);
+                const double v = d.read(std::max(2.0, (base[k] + depth * 4 * mod) * 0.001 * sr)), p = pans[k] * spread;
+                ol += v * std::cos((p + 1) * PI / 4); orr += v * std::sin((p + 1) * PI / 4);
+            }
+            L[i] = (float)(L[i] * m.dry + ol * 0.45 * m.wet); R[i] = (float)(R[i] * m.dry + orr * 0.45 * m.wet);
+        }
+    }
+};
+
+// Scratch: the last stretch of sound is played back and forth like a record pushed under a hand: the read position
+// swings `depth` beats behind the live point, `rate` times per beat-length (locked to the song), with a sine or a
+// sharper "zigzag" motion; the speed changes are the pitch swoops. Mix blends it with the live sound.
+class Scratch : public Effect {
+    std::vector<float> bl, br; size_t W = 0, wp = 0; double depth = 0.25, own = 0; std::string rate = "1/8", shape = "sine"; WetDry m;
+    inline float rd(const std::vector<float>& b, double p) const { while (p < 0) p += (double)W; const size_t i = (size_t)p % W; const double f = p - std::floor(p); return (float)(b[i] * (1 - f) + b[(i + 1) % W] * f); }
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); W = (size_t)(6 * s); bl.assign(W, 0.f); br.assign(W, 0.f); wp = 0; }
+    void set(const FxSlot& f) override { depth = f.num("depth", 0.25); rate = f.str("rate", "1/8"); shape = f.str("shape", "sine"); m.mix(f.num("mix", 1)); }
+    void process(float* L, float* R, int n) override {
+        const double spb = 60.0 / std::max(20.0, bpm) * sr, per = std::max(1.0 / 16, noteBeats(rate)); double pos = beat >= 0 ? beat : own;
+        for (int i = 0; i < n; i++, pos += 1 / spb) {
+            bl[wp] = L[i]; br[wp] = R[i];
+            double ph = pos / per; ph -= std::floor(ph);
+            double sw = shape == "zigzag" ? (ph < 0.5 ? ph * 2 : 2 - ph * 2) : 0.5 - 0.5 * std::cos(2 * PI * ph);   // 0 at the live point, 1 at the far end
+            if (shape == "zigzag") sw = sw * sw * (3 - 2 * sw);
+            const double back = 1 + sw * depth * spb;
+            const double p = (double)wp - back;
+            L[i] = (float)(L[i] * m.dry + rd(bl, p) * m.wet); R[i] = (float)(R[i] * m.dry + rd(br, p) * m.wet);
+            wp = (wp + 1) % W;
+        }
+        own = pos;
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -1416,6 +1517,9 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "multitap") return std::make_unique<MultiTap>();
     if (t == "utility") return std::make_unique<Utility>();
     if (t == "testtone") return std::make_unique<TestTone>();
+    if (t == "specgate") return std::make_unique<SpectralGate>();
+    if (t == "ensemble") return std::make_unique<Ensemble>();
+    if (t == "scratch") return std::make_unique<Scratch>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 
