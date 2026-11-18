@@ -352,8 +352,8 @@ public:
     }
 };
 
-// Saturator: four-times oversampled wave shaping (JUCE's half-band FIR oversampler, integer latency, so the dry path can
-// be delayed to match). Modes: tube (biased tanh: even harmonics), tape (soft arctan with a low bump before and the top
+// Saturator: four-times oversampled wave shaping (JUCE's polyphase IIR half-band oversampler: cheap; its small latency,
+// rounded, delays the dry path to match). Modes: tube (biased tanh: even harmonics), tape (soft arctan with a low bump before and the top
 // rolled off by drive), transformer (the lows saturate more than the highs), clip (cubic soft clip), exciter (only the
 // band above `band` is driven, then added). Level is compensated so a -10 dBFS tone keeps about its level.
 class Saturator : public Effect {
@@ -370,7 +370,7 @@ class Saturator : public Effect {
 public:
     void prepare(double s, int b) override {
         Effect::prepare(s, b);
-        os = std::make_unique<juce::dsp::Oversampling<float>>(2, 2, juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple, true, true);
+        os = std::make_unique<juce::dsp::Oversampling<float>>(2, 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true, false);
         os->initProcessing((size_t)std::max(b, 4096)); lat = (int)std::lround(os->getLatencyInSamples());
         buf.setSize(2, std::max(b, 4096)); dl.init((size_t)lat + 8); dr.init((size_t)lat + 8);
         bump.setType(FilterType::Peaking); toneLp.setType(FilterType::Lowpass); exHp.setType(FilterType::Highpass); lowSplit.setType(FilterType::Lowpass); dc.setType(FilterType::Highpass);
@@ -1168,7 +1168,7 @@ class AmpSim : public Effect {
 public:
     void prepare(double s, int b) override {
         Effect::prepare(s, b);
-        os = std::make_unique<juce::dsp::Oversampling<float>>(2, 2, juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple, true, true);
+        os = std::make_unique<juce::dsp::Oversampling<float>>(2, 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true, false);
         os->initProcessing((size_t)std::max(b, 4096)); lat = (int)std::lround(os->getLatencyInSamples()); buf.setSize(2, std::max(b, 4096)); dl.init((size_t)lat + 8); dr.init((size_t)lat + 8);
         pre.setType(FilterType::Highshelf); pre.set(s * 4, 1200, 1, 6); dcb.setType(FilterType::Highpass); dcb.set(s, 15, Q_BW2, 0); lastCab = "";
     }

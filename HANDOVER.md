@@ -1048,6 +1048,9 @@ Second round done.
   - **Test tone** (`testtone`): sine, log sweep, pink or white noise at a set peak level, replacing or added to the
     signal. Check: a -20 dBFS sine reads -23.0 dB RMS.
   The Mixer categories now end with "Stereo & creative" (adds the trance gate) and "Utility & meters".
+- **Speed check** (self-test 52 / 52): every built-in effect must process a stereo mix at least 20x faster than real time
+  (48 kHz, 512-sample blocks). The saturator and amp now oversample with JUCE polyphase IIR half-band filters
+  instead of FIR (the amp went from 21x to well clear); the slowest is now the original convolution reverb (22x).
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -1063,7 +1066,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (51 after the third-round effects; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (52 with the speed check; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.

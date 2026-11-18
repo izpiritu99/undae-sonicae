@@ -532,6 +532,19 @@ int main(int argc, char** argv) {
                   "trance gate opens and shuts " + std::to_string(gOn - gOff) + " dB on alternate 1/16 steps; multi-tap: " + std::to_string(taps) + " taps inside 1 s at 1/8, 1/4, 3/8 (the 1/2 tap falls at 1 s), the first on the left; "
                   "utility flips one side exactly and takes 6.0 dB; test tone at -20 dBFS peak reads " + std::to_string(ttLv) + " dB RMS (-23.0)");
         }
+        // speed: every built-in effect, on 2 s of a stereo mix in 512-sample blocks, runs at least 20 times faster than real time
+        {
+            std::vector<float> mL((size_t)(2 * N)), mR((size_t)(2 * N)); for (int i = 0; i < 2 * N; i++) { mL[(size_t)i] = (float)(0.3 * std::sin(i * 0.0571) + 0.2 * std::sin(i * 0.31)); mR[(size_t)i] = (float)(0.3 * std::sin(i * 0.0573) + 0.15 * std::sin(i * 0.47)); }
+            std::string slow, fastest, slowest; double worst = 1e9, best = 0;
+            for (auto& sp : ui::fxSpecs()) {
+                auto f = ui::newFx(sp.type); auto e = us::makeEffect(sp.type); e->samples = bank.get(); e->prepare(sr, 512); e->set(f); auto L = mL, R = mR;
+                const auto t0 = juce::Time::getMillisecondCounterHiRes();
+                for (int o = 0; o < 2 * N; o += 512) { e->bpm = 120; e->beat = o / sr * 2; e->process(L.data() + o, R.data() + o, std::min(512, 2 * N - o)); }
+                const double x = 2000.0 / std::max(0.01, juce::Time::getMillisecondCounterHiRes() - t0);
+                if (x < worst) { worst = x; slowest = sp.type; } if (x > best) { best = x; fastest = sp.type; } if (x < 20) slow += std::string(sp.type) + "(" + std::to_string((int)x) + "x) ";
+            }
+            check(slow.empty(), std::to_string(ui::fxSpecs().size()) + " built-in effects all run at least 20x real time (slowest " + slowest + " at " + std::to_string((int)worst) + "x)" + (slow.empty() ? "" : "; too slow: " + slow));
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;
