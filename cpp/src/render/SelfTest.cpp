@@ -3,6 +3,7 @@
 #include <iostream>
 #include <set>
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <juce_dsp/juce_dsp.h>
 #include "app/Doc.h"
 #include "engine/Analysis.h"
 #include "engine/SoundDesign.h"
@@ -441,6 +442,17 @@ int main(int argc, char** argv) {
                 if (!fin || pk < 0.003f || pk > 2.5f) { allOk = false; bad += std::string(name) + " (" + std::to_string(pk) + ") "; }
             }
             check(unique && allOk && count >= 40, "synth presets: " + std::to_string(count) + " patches, names unique, every one sounds" + (bad.empty() ? "" : ": not " + bad));
+        }
+        // the Studio Kit: every sound present and normalised; the kick sits low, the hats high, and kit names do not repeat
+        {
+            int n2 = 0; bool okAll = true; std::set<std::string> nm; bool uniq = true;
+            for (auto& sm : bank->kit()) { uniq &= nm.insert(sm->name).second; if (sm->group != "Studio Kit") continue; n2++; float pk = 0; for (float v : sm->ch[0]) pk = std::max(pk, std::abs(v)); okAll &= std::abs(pk - 0.9f) < 0.01f && sm->seconds() > 0.05; }
+            auto band = [&](const std::string& id, double lo, double hi) {   // share of the energy between lo and hi Hz (FFT of the first 8192 samples)
+                auto sm = bank->get(id); juce::dsp::FFT f(13); std::vector<float> x(16384, 0.f); for (size_t i = 0; i < 8192 && i < sm->ch[0].size(); i++) x[i] = sm->ch[0][i];
+                f.performFrequencyOnlyForwardTransform(x.data()); double in = 0, all = 0; for (int b = 1; b < 4096; b++) { const double hz = b * sm->sr / 8192, e = (double)x[(size_t)b] * x[(size_t)b]; all += e; if (hz >= lo && hz < hi) in += e; } return in / std::max(1e-12, all); };
+            const double kickLow = band("kit2:kick", 30, 200), hatHigh = band("kit2:hat", 5000, 20000), snareMid = band("kit2:snare", 150, 8000);
+            check(n2 == 14 && okAll && uniq && kickLow > 0.7 && hatHigh > 0.7 && snareMid > 0.7, "Studio Kit: " + std::to_string(n2) + " sounds, normalised, names unique across kits; kick energy below 200 Hz "
+                  + std::to_string((int)(kickLow * 100)) + " %, closed hat above 5 kHz " + std::to_string((int)(hatHigh * 100)) + " %");
         }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";

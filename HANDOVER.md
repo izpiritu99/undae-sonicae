@@ -988,6 +988,16 @@ modal models, arpeggiator / step sequencer, original preset banks).
   Strings, Square Lead, Chip Lead, Electric Piano, Wobble Bass, Stab Chord, Warm Bass, Hollow Pad, Saw Stack, Breathy
   Flute, Sweep Pad, Arp Pluck, Deep Sine Bass, Choir Swell): 42 synth presets in all. The wavetable "Glass Keys" was
   renamed "Crystal Keys" (the name was taken). Check: names unique and every preset sounds, finite and not clipping.
+- **Studio Kit** (self-test 46 / 46): 14 synthesised acoustic-flavoured drums in `Samples.cpp` ("kit2:*", group
+  "Studio Kit": kick, snare, side stick, hand clap, closed / pedal / open hat, ride, crash, floor / rack / high tom,
+  shaker, tambourine), appended after the other generators so the 808 kit's random draws are unchanged (First Light
+  renders identically to the build before this session: every band +0.00 dB). They appear in the Library and the
+  sampler's sound list. Check: all present and normalised, names unique across kits, kick energy 98 % below 200 Hz,
+  closed hat 90 % above 5 kHz.
+
+Every item on the plan above is now built. Second round (gaps the survey also shows, being worked on next): doubler,
+pitch shifter, auto-filter (envelope / LFO wah), amp simulator, sub-bass enhancer, dynamic EQ, effect chains
+(channel-strip and mastering presets that add several slots at once), impulse-response loading for convolution.
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -1003,7 +1013,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (45 after the preset bank; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (46 after the Studio Kit; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.

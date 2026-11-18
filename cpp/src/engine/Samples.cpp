@@ -102,6 +102,56 @@ std::vector<KitDef> kitDefs() {
             auto o = osc(c.n(), "sine", fr); gain(o, env(1, 1.6, 0.002));
             Shaper ws; ws.curve.resize(512); for (int i = 0; i < 512; i++) ws.curve[i] = (float)std::tanh((i / 255.5 - 1) * 2.2);
             for (auto& v : o) v = ws.apply(v); addTo(c, o); return finish(c); }, "Instruments" },
+        // Studio Kit: an acoustic-flavoured kit, synthesised (appended after the others, so their random draws stay the same)
+        { "kit2:kick", "Studio Kick", [](Rng& r) { Ctx c(0.6); Timeline fr(110); fr.set(110, 0).exp(52, 0.05);
+            auto o = osc(c.n(), "sine", fr); gain(o, env(1, 0.42)); addTo(c, o);
+            auto b = osc(c.n(), "triangle", 1600); gain(b, env(0.35, 0.006)); addTo(c, b);
+            auto nz = noise(c.n(), 0.01, r); filt(nz, "highpass", 2000); gain(nz, env(0.3, 0.004)); addTo(c, nz); return finish(c); }, "Studio Kit" },
+        { "kit2:snare", "Studio Snare", [](Rng& r) { Ctx c(0.45);
+            Timeline f1(220); f1.set(220, 0).exp(185, 0.02); auto m1 = osc(c.n(), "sine", f1); gain(m1, env(0.7, 0.11)); addTo(c, m1);
+            Timeline f2(360); f2.set(360, 0).exp(330, 0.02); auto m2 = osc(c.n(), "sine", f2); gain(m2, env(0.35, 0.07)); addTo(c, m2);
+            auto nz = noise(c.n(), 0.4, r); filt(nz, "highpass", 900); filt(nz, "bandpass", 4500, 0.6); gain(nz, env(0.9, 0.2)); addTo(c, nz); return finish(c); }, "Studio Kit" },
+        { "kit2:stick", "Side Stick", [](Rng& r) { Ctx c(0.12); Timeline f(1900); f.set(1900, 0).exp(1500, 0.02);
+            auto o = osc(c.n(), "sine", f); gain(o, env(0.8, 0.03)); addTo(c, o);
+            auto nz = noise(c.n(), 0.02, r); filt(nz, "bandpass", 2500, 1.5); gain(nz, env(0.6, 0.012)); addTo(c, nz); return finish(c); }, "Studio Kit" },
+        { "kit2:clap", "Hand Clap", [](Rng& r) { Ctx c(0.5); Timeline g(1); g.set(0, 0);
+            for (int k = 0; k < 4; k++) { const double t0 = k * 0.011; g.set(0, t0).lin(k == 3 ? 0.9 : 0.7, t0 + 0.001).exp(0.05, t0 + 0.009); }
+            g.exp(0.0001, 0.42); auto nz = noise(c.n(), 0.5, r); filt(nz, "bandpass", 1300, 1.1); filt(nz, "highpass", 600); gain(nz, g); addTo(c, nz); return finish(c); }, "Studio Kit" },
+        { "kit2:hat", "Studio Closed Hat", [](Rng& r) { Ctx c(0.12); std::vector<float> m(c.n(), 0.f);
+            for (double f : METAL) { auto o = osc(c.n(), "square", f * 1.47); for (size_t i = 0; i < c.n(); i++) m[i] += o[i] * 0.12f; }
+            auto nz = noise(c.n(), 0.12, r); for (size_t i = 0; i < c.n(); i++) m[i] += nz[i] * 0.5f; filt(m, "highpass", 7000); gain(m, env(0.8, 0.055)); addTo(c, m); return finish(c); }, "Studio Kit" },
+        { "kit2:pedal", "Pedal Hat", [](Rng& r) { Ctx c(0.1); std::vector<float> m(c.n(), 0.f);
+            for (double f : METAL) { auto o = osc(c.n(), "square", f * 1.47); for (size_t i = 0; i < c.n(); i++) m[i] += o[i] * 0.12f; }
+            auto nz = noise(c.n(), 0.1, r); for (size_t i = 0; i < c.n(); i++) m[i] += nz[i] * 0.3f; filt(m, "bandpass", 6000, 1.2); gain(m, env(0.6, 0.032, 0.004)); addTo(c, m); return finish(c); }, "Studio Kit" },
+        { "kit2:ohat", "Studio Open Hat", [](Rng& r) { Ctx c(0.8); std::vector<float> m(c.n(), 0.f);
+            for (double f : METAL) { auto o = osc(c.n(), "square", f * 1.47); for (size_t i = 0; i < c.n(); i++) m[i] += o[i] * 0.12f; }
+            auto nz = noise(c.n(), 0.8, r); for (size_t i = 0; i < c.n(); i++) m[i] += nz[i] * 0.5f; filt(m, "highpass", 6500); gain(m, env(0.8, 0.55)); addTo(c, m); return finish(c); }, "Studio Kit" },
+        { "kit2:ride", "Ride", [](Rng& r) { Ctx c(2.8); std::vector<float> m(c.n(), 0.f);
+            static const double P[] = { 341, 527, 853, 1113, 1490, 2347, 3127, 4519 };
+            for (double f : P) { auto o = osc(c.n(), "sine", f); for (size_t i = 0; i < c.n(); i++) m[i] += o[i] * (float)(0.25 * std::exp(-(double)i / SR * (0.8 + f / 2500))); }
+            auto ping = osc(c.n(), "sine", 2347); gain(ping, env(0.4, 0.35)); for (size_t i = 0; i < c.n(); i++) m[i] += ping[i];
+            auto nz = noise(c.n(), 2.8, r); filt(nz, "highpass", 5000); gain(nz, env(0.25, 1.8)); for (size_t i = 0; i < c.n(); i++) m[i] += nz[i];
+            filt(m, "highpass", 300); addTo(c, m); return finish(c); }, "Studio Kit" },
+        { "kit2:crash", "Crash", [](Rng& r) { Ctx c(2.4); std::vector<float> m(c.n(), 0.f);
+            for (double f : METAL) { auto o = osc(c.n(), "square", f * 2.1); for (size_t i = 0; i < c.n(); i++) m[i] += o[i] * 0.1f; }
+            auto nz = noise(c.n(), 2.4, r); for (size_t i = 0; i < c.n(); i++) m[i] += nz[i] * 0.8f; filt(m, "highpass", 3000);
+            Timeline g(1); g.set(0.0001, 0).lin(0.9, 0.004).exp(0.5, 0.06).exp(0.0001, 2.2); gain(m, g); addTo(c, m); return finish(c); }, "Studio Kit" },
+        { "kit2:tomlo", "Floor Tom", [](Rng& r) { Ctx c(0.8); Timeline f(115); f.set(115, 0).exp(92, 0.12); auto o = osc(c.n(), "sine", f); gain(o, env(1, 0.55)); addTo(c, o);
+            Timeline f2(170); f2.set(170, 0).exp(140, 0.1); auto o2 = osc(c.n(), "sine", f2); gain(o2, env(0.3, 0.25)); addTo(c, o2);
+            auto nz = noise(c.n(), 0.03, r); filt(nz, "lowpass", 2500); gain(nz, env(0.3, 0.015)); addTo(c, nz); return finish(c); }, "Studio Kit" },
+        { "kit2:tommid", "Rack Tom", [](Rng& r) { Ctx c(0.6); Timeline f(165); f.set(165, 0).exp(138, 0.1); auto o = osc(c.n(), "sine", f); gain(o, env(1, 0.42)); addTo(c, o);
+            Timeline f2(250); f2.set(250, 0).exp(210, 0.08); auto o2 = osc(c.n(), "sine", f2); gain(o2, env(0.3, 0.2)); addTo(c, o2);
+            auto nz = noise(c.n(), 0.03, r); filt(nz, "lowpass", 3000); gain(nz, env(0.3, 0.012)); addTo(c, nz); return finish(c); }, "Studio Kit" },
+        { "kit2:tomhi", "Studio High Tom", [](Rng& r) { Ctx c(0.5); Timeline f(230); f.set(230, 0).exp(196, 0.08); auto o = osc(c.n(), "sine", f); gain(o, env(1, 0.34)); addTo(c, o);
+            Timeline f2(345); f2.set(345, 0).exp(300, 0.07); auto o2 = osc(c.n(), "sine", f2); gain(o2, env(0.3, 0.16)); addTo(c, o2);
+            auto nz = noise(c.n(), 0.03, r); filt(nz, "lowpass", 3500); gain(nz, env(0.3, 0.01)); addTo(c, nz); return finish(c); }, "Studio Kit" },
+        { "kit2:shaker", "Shaker", [](Rng& r) { Ctx c(0.2); Timeline g(1); g.set(0.0001, 0).lin(0.5, 0.03).exp(0.2, 0.07).lin(0.8, 0.1).exp(0.0001, 0.19);
+            auto nz = noise(c.n(), 0.2, r); filt(nz, "bandpass", 7000, 1.4); filt(nz, "highpass", 4000); gain(nz, g); addTo(c, nz); return finish(c); }, "Studio Kit" },
+        { "kit2:tamb", "Tambourine", [](Rng& r) { Ctx c(0.5); std::vector<float> m(c.n(), 0.f);
+            static const double J[] = { 5650, 6930, 7730, 8540, 9870 };
+            for (double f : J) { auto o = osc(c.n(), "sine", f); for (size_t i = 0; i < c.n(); i++) m[i] += o[i] * 0.15f; }
+            auto nz = noise(c.n(), 0.5, r); for (size_t i = 0; i < c.n(); i++) m[i] += nz[i] * 0.4f; filt(m, "highpass", 5000);
+            Timeline g(1); g.set(0.0001, 0).lin(0.9, 0.002).exp(0.3, 0.03).lin(0.6, 0.045).exp(0.0001, 0.45); gain(m, g); addTo(c, m); return finish(c); }, "Studio Kit" },
     };
     return k;
 }
