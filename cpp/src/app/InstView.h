@@ -87,6 +87,7 @@ private:
         else if (c->type == "plugin") plugUI();
         else if (c->type == "sample") samplerUI();
         else if (sp()) synthUI();
+        if (c) arpUI();   // every instrument type
         cv.resized();
     }
     void plugUI() {
@@ -178,6 +179,19 @@ private:
         for (size_t i = 0; i < roots.size(); i++) { us::Zone z; z.sample = roots[i].second; z.root = roots[i].first;
             z.lo = i == 0 ? 0 : (roots[i - 1].first + roots[i].first) / 2 + 1; z.hi = i + 1 == roots.size() ? 127 : (roots[i].first + roots[i + 1].first) / 2; c->zones.push_back(z); }
         doc.commit(); toast("Mapped " + juce::String((int)roots.size()) + " samples across the keyboard");
+    }
+    void arpUI() {
+        auto& G = cv.grid; auto* c = ch(); if (!c) return;
+        G.card("Arpeggiator", c->arp.on, [this](bool b) { if (auto* x = ch()) { x->arp.on = b; doc.commit(); } });
+        auto A = [this]() -> us::ArpP& { return ch()->arp; };
+        G.pick("Order", { { "up", "Up" }, { "down", "Down" }, { "updown", "Up and down" }, { "played", "As played" }, { "random", "Random" } }, juce::String(c->arp.mode), [this, A](const juce::String& v) { A().mode = v.toStdString(); doc.commit(); }, 110);
+        G.pick("Rate", { { "1/32", "1/32" }, { "1/16", "1/16" }, { "1/16 triplet", "1/16 triplet" }, { "1/8", "1/8" }, { "1/8 triplet", "1/8 triplet" }, { "1/8 dotted", "1/8 dotted" }, { "1/4", "1/4" } }, juce::String(c->arp.rate), [this, A](const juce::String& v) { A().rate = v.toStdString(); doc.commit(); }, 100);
+        G.knob("Octaves", 1, 4, 1, c->arp.oct, live([A](double v) { A().oct = (int)std::round(v); }), done(), false, {}, 1);
+        G.knob("Gate", 0.05, 1, 0.6, c->arp.gate, live([A](double v) { A().gate = v; }), done(), false, pct);
+        G.knob("Steps", 1, 16, 16, c->arp.len, live([A](double v) { A().len = (int)std::round(v); }), done(), false, {}, 1);
+        G.br();
+        for (int k = 0; k < 16; k++) G.toggle(juce::String(k + 1), (c->arp.steps >> k) & 1, [this, k](bool b) { if (auto* x = ch()) { x->arp.steps = b ? (x->arp.steps | (1 << k)) : (x->arp.steps & ~(1 << k)); doc.commit(); } }, "Step " + juce::String(k + 1) + ": on plays, off rests");
+        G.note("Hold a chord (or draw one in the Piano Roll) and the arpeggiator plays its notes one at a time, locked to the song. The numbered steps make a rhythm: switched-off steps rest.");
     }
     std::unique_ptr<juce::FileChooser> chooser;
     void upload() {

@@ -977,6 +977,13 @@ modal models, arpeggiator / step sequencer, original preset banks).
   Pluck, Steel Pluck, Pluck Bass, Vibes, Glass Mallet, Wood Block, Tower Bell. Checks: the string plays note 57.001 and
   falls 18 dB in 0.5 s at a 2 s decay (15 in theory, the loop filter takes a little more); the bar rings at 1 and
   2.756 times the note; every model preset plays.
+- **Arpeggiator / step sequencer** (self-test 44 / 44): `Channel::arp` (saved as "arp"), for every instrument type
+  (synth, sampler, plug-in). Notes reaching an arpeggiated channel are held in the strip (`Strip::held`, up to 32;
+  live keys until let go) instead of sounding; `Graph::runArps` plays them on a 1/32 to 1/4 grid locked to the song
+  (its own clock when stopped): up, down, up and down, as played, random (seeded by the step number, so repeatable),
+  over 1-4 octaves, gate length, and a 1-16 step on / off pattern for rhythm. Card "Arpeggiator" at the bottom of every
+  instrument panel. Check, rendered through the engine: a held C major chord at 120 BPM plays C E G C on the 1/16 grid,
+  silent between notes at gate 50 %, and a switched-off step rests.
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -992,7 +999,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (43 after the physical models; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (44 after the arpeggiator; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
@@ -1000,7 +1007,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
    `autopan`, `lofi`). The synth's "wt:" wave names and the five wavetable presets also need porting to
-   `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, and the synth's "model" source to the Electron engine. Until then, do not open projects that use them in the Electron app.
+   `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp" to the Electron engine. Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).

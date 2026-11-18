@@ -411,6 +411,24 @@ int main(int argc, char** argv) {
                   "physical models: the plucked string plays note " + std::to_string(pp) + " (57) and falls " + std::to_string(drop) + " dB in 0.5 s (2 s decay: 15 in theory); the struck bar rings at 1 and 2.756 x ("
                   + std::to_string(20 * std::log10(m2 / std::max(1e-9, off))) + " dB over the gap); the model presets play" + (badP.empty() ? "" : " (not " + badP + ")"));
         }
+        // arpeggiator, through the engine: a held C major chord at 120 BPM plays C, E, G, C on the 1/16 grid; switched-off steps rest
+        {
+            auto renderArp = [&](us::ArpP arp) {
+                us::Project ap = ui::blankProject(); ap.bpm = 120; auto ac = ui::newChannel(ap, "synth", "Arp"); ac.bus = "master"; ac.synth->osc[0].wave = "sine"; ac.synth->f1.on = false; ac.synth->aenv = { 0.002, 0.05, 1, 0.01 }; ac.arp = arp; ap.channels.push_back(ac);
+                for (int nt : { 60, 64, 67 }) { us::Note q; q.id = us::newId(); q.t = 0; q.d = us::PPQ; q.n = nt; q.v = 1; ap.patterns[0].notes[ac.id].push_back(q); }
+                us::Engine ea(bank); ea.prepare(48000, 512); ea.setProject(std::make_shared<us::Project>(ap));
+                auto b = ea.render(us::Mode::Pattern, ap.patterns[0].id, 1, 48000); std::vector<float> m((size_t)b.getNumSamples()); for (int i = 0; i < b.getNumSamples(); i++) m[(size_t)i] = b.getSample(0, i); return m; };
+            auto toneW = [&](const std::vector<float>& v, double hz, double a, double b) { double c = 0, s2 = 0; const int i0 = (int)(a * sr), i1 = (int)(b * sr); for (int i = i0; i < i1; i++) { const double w = 2 * 3.14159265358979 * hz * i / sr; c += v[(size_t)i] * std::cos(w); s2 += v[(size_t)i] * std::sin(w); } return 2 * std::sqrt(c * c + s2 * s2) / (i1 - i0); };
+            us::ArpP A; A.on = true; A.mode = "up"; A.rate = "1/16"; A.gate = 0.5;
+            auto up = renderArp(A); const double hz[] = { 261.63, 329.63, 392.0, 261.63 };
+            bool order = true; std::string got;
+            for (int k = 0; k < 4; k++) { const double a = k * 0.125 + 0.01, b = a + 0.045; int best = 0; double bv = 0; for (int j = 0; j < 3; j++) { const double v = toneW(up, hz[j], a, b); if (v > bv) { bv = v; best = j; } } got += "CEG"[best]; order &= std::abs(hz[best] - hz[k]) < 1 && bv > 0.02; }
+            const double between = toneW(up, 261.63, 0.08, 0.12) + toneW(up, 329.63, 0.08, 0.12);   // gate 0.5: silent in the second half of a step
+            A.steps = 0x5; A.len = 4; auto rest = renderArp(A);   // steps 1 and 3 on, 2 and 4 off
+            double on1 = 0, off2 = 0; for (double h : { 261.63, 329.63, 392.0 }) { on1 += toneW(rest, h, 0.01, 0.055); off2 += toneW(rest, h, 0.135, 0.18); }
+            check(order && between < 0.01 && on1 > 0.02 && off2 < on1 * 0.02, "arpeggiator: a held C major chord plays " + got + " on the 1/16 grid at 120 BPM, silent between notes at gate 50 %; a switched-off step rests ("
+                  + std::to_string(20 * std::log10(std::max(1e-9, off2) / on1)) + " dB)");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

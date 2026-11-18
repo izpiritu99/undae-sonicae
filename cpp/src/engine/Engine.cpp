@@ -128,6 +128,8 @@ struct Engine::Strip {
     const Channel* c = nullptr; BusNode* bus = nullptr; std::shared_ptr<PluginInstance> plug;
     std::vector<std::unique_ptr<Voice>> voices; std::vector<bool> stolen; int last = -1; unsigned rr = 0;   // rr: round robin over zones
     std::vector<float> L, R, M; double vol = 0.8, pan = 0;
+    struct Held { int note; double vel, t0, t1; };   // notes held on an arpeggiated channel (t1 1e30 while a key is down)
+    Held held[32]; int heldN = 0;
 };
 struct Engine::ClipPlay { SampleRef s; BusNode* bus; double t0, off, dur, gain; double ratio; };
 
@@ -205,8 +207,12 @@ struct Engine::Graph {
     void killActive(Strip& s, double t) { for (size_t i = 0; i < s.voices.size(); i++) { auto& v = s.voices[i]; if (v->t0 <= t && v->end > t) { v->kill(t); s.stolen[i] = true; } } }
 
     // Graph.trigger in the browser version. dur < 0: held until released.
-    Voice* trigger(Strip& s, int note, double vel, double t, double dur, const Event* e, bool slide, double liveBend = 0, double wheel = 0) {
+    Voice* trigger(Strip& s, int note, double vel, double t, double dur, const Event* e, bool slide, double liveBend = 0, double wheel = 0, bool fromArp = false) {
         const Channel& c = *s.c;
+        if (c.arp.on && !fromArp) {   // the arpeggiator plays it: remember the note for as long as it is held
+            if (s.heldN < 32) s.held[s.heldN++] = { note, vel, t, dur >= 0 ? t + dur : 1e30 };
+            return nullptr;
+        }
         for (size_t i = 0; i < s.voices.size();) { if (s.voices[i]->end < t) { s.voices.erase(s.voices.begin() + i); s.stolen.erase(s.stolen.begin() + i); } else i++; }
         if (c.choke) for (auto& o : strips) if (o.get() != &s && o->c->choke == c.choke) killActive(*o, t);
         if (slide) {
@@ -245,7 +251,7 @@ struct Engine::Graph {
 
     static double bendRange(const Channel& c) { return c.type == "synth" && c.synth ? c.synth->bendRange : 2.0; }
     bool alive(Strip* s, Voice* v) const { for (auto& x : s->voices) if (x.get() == v) return true; return false; }
-    void killAll(double t) { for (auto& s : strips) { for (auto& v : s->voices) v->kill(t); if (s->plug) s->plug->panic(); } held.clear(); clips.clear(); }
+    void killAll(double t) { for (auto& s : strips) { for (auto& v : s->voices) v->kill(t); if (s->plug) s->plug->panic(); s->heldN = 0; } held.clear(); clips.clear(); }
 
     // seconds-based clip playback (Graph.playClip): 4 ms fades at both ends
     void addClip(const AudioClip& a, SampleRef buf, double t, double off, double dur) {
@@ -281,8 +287,42 @@ struct Engine::Graph {
         }
     }
 
+    // arpeggiators: the steps of every arpeggiated channel that fall in this block
+    static double arpBeats(const std::string& r) {
+        static const std::pair<const char*, double> tb[] = { { "1/32", 0.125 }, { "1/16", 0.25 }, { "1/16 triplet", 1.0 / 6 }, { "1/8", 0.5 }, { "1/8 triplet", 1.0 / 3 }, { "1/8 dotted", 0.75 }, { "1/4", 1 } };
+        for (auto& [k, v] : tb) if (r == k) return v;
+        return 0.25;
+    }
+    void runArps(int n, double t) {
+        const double spt = P->secondsPerTick(), bps = P->bpm / 60, te = t + n / sr;
+        const double b0 = rolling ? (tickAt + (t - timeAt) / spt) / PPQ : t * bps, b1 = b0 + (te - t) * bps;
+        for (auto& sp : strips) {
+            Strip& s = *sp; const ArpP& A = s.c->arp; if (!A.on || s.heldN == 0) continue;
+            for (int i = 0; i < s.heldN;) { if (s.held[i].t1 <= t) s.held[i] = s.held[--s.heldN]; else i++; }
+            const double sb = arpBeats(A.rate); const int len = std::clamp(A.len, 1, 16), oct = std::clamp(A.oct, 1, 4);
+            for (int64_t k = (int64_t)std::ceil(b0 / sb - 1e-9); (double)k * sb < b1; k++) {
+                const double tk = t + ((double)k * sb - b0) / bps;
+                int order[32]; int m = 0;
+                for (int i = 0; i < s.heldN; i++) if (s.held[i].t0 <= tk + 1e-6 && s.held[i].t1 > tk) order[m++] = i;
+                if (!m) continue;
+                const bool played = A.mode == "played";
+                std::sort(order, order + m, [&](int a, int b) { return played ? s.held[a].t0 < s.held[b].t0 : s.held[a].note < s.held[b].note; });
+                const int pos = (int)(((k % len) + len) % len); if (!((A.steps >> pos) & 1)) continue;
+                const int M = m * oct; int64_t idx = k;
+                int j;
+                if (A.mode == "down") j = M - 1 - (int)(((idx % M) + M) % M);
+                else if (A.mode == "updown") { const int per = std::max(1, 2 * M - 2); const int q = (int)(((idx % per) + per) % per); j = M > 1 ? (q < M ? q : per - q) : 0; }
+                else if (A.mode == "random") { uint64_t z = (uint64_t)k * 0x9E3779B97F4A7C15ull; z ^= z >> 29; z *= 0xBF58476D1CE4E5B9ull; z ^= z >> 32; j = (int)(z % (uint64_t)M); }
+                else j = (int)(((idx % M) + M) % M);
+                const auto& h = s.held[order[j % m]];
+                trigger(s, std::clamp(h.note + 12 * (j / m), 0, 127), h.vel, tk, A.gate * sb / bps, nullptr, false, 0, 0, true);
+            }
+        }
+    }
+
     // one block (n <= block) at engine time t into out
     void render(float* outL, float* outR, int n, double t) {
+        runArps(n, t);
         for (auto& b : buses) { std::fill_n(b->L.data(), n, 0.f); std::fill_n(b->R.data(), n, 0.f); }
         for (auto& sp : strips) {
             Strip& s = *sp;
@@ -518,6 +558,7 @@ void Engine::process(float* L, float* R, int n) {
                 Voice* v = g.trigger(*it->second, e.note, e.vel, tNow, -1, nullptr, false, liveBend, liveWheel); if (v) g.held.push_back({ it->second, e.note, v });
                 if (recording && playing) recOpen[{ e.ch, e.note }] = { recTick, e.vel };
             } else {
+                { Strip& as = *it->second; for (int i = 0; i < as.heldN; i++) if (as.held[i].note == e.note && as.held[i].t1 > 1e29) as.held[i].t1 = tNow; }   // an arpeggiated key let go
                 for (size_t i = 0; i < g.held.size();) {
                     auto& h = g.held[i];
                     if (h.s == it->second && h.note == e.note && !h.sustained) { if (sustainDown) { h.sustained = true; i++; continue; } if (g.alive(h.s, h.v)) h.v->release(tNow); g.held.erase(g.held.begin() + (long)i); }

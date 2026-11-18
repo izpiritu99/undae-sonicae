@@ -39,6 +39,10 @@ struct SynthP {
 // A multi-sample zone: notes lo..hi at velocities vlo..vhi (0-127) play `sample`, re-pitched from `root`, `gain` dB.
 // Zones covering the same notes and velocities take turns (round robin).
 struct Zone { std::string sample; int lo = 0, hi = 127, root = 60, vlo = 0, vhi = 127; double gain = 0; };
+// Arpeggiator with a step pattern, for any channel: the notes held on the channel are played one at a time on a grid of
+// `rate` notes (locked to the song), in `mode` order over `oct` octaves; step k of the `len`-step pattern sounds only if
+// bit k of `steps` is set; each sounds for `gate` of a step.
+struct ArpP { bool on = false; std::string mode = "up", rate = "1/16"; int oct = 1; double gate = 0.6; int steps = 0xFFFF, len = 16; };
 struct GranP { bool on = false; double pos = 0.3, scan = 0, size = 0.08, density = 24, jitter = 0.03, spray = 0, spread = 0.6, rev = 0; };
 
 struct Channel {
@@ -46,6 +50,7 @@ struct Channel {
     double vol = 0.8, pan = 0; bool mute = false, solo = false;
     std::string bus = "master"; int root = 60; std::string sample = "inst:keys";
     double tune = 0, fine = 0, start = 0, att = 0, rel = 0.08; bool gate = false, rev = false, cut = false; int choke = 0;
+    ArpP arp;
     GranP gran; std::vector<Zone> zones;   // zones, when present, replace `sample`
     std::optional<SynthP> synth;
     juce::var plug;   // plug-in slot { path, pid, name, fmt, state, v<id>... }
