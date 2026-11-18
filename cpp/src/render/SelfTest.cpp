@@ -371,6 +371,30 @@ int main(int argc, char** argv) {
                   "granular: grains of a 440 Hz sample keep 440 Hz (" + std::to_string(20 * std::log10(pa)) + " dB over the neighbouring semitones), an octave up 880 Hz (" + std::to_string(20 * std::log10(pb)) + " dB), " + std::to_string(held) + " dB while held, "
                   + std::to_string(after - held) + " dB after the release; settings saved and reloaded");
         }
+        // multi-sample zones, through the engine: each note plays its zone's sample from that zone's root; overlapping zones take turns
+        {
+            auto wavOf = [&](double hz, const char* name) { const juce::File w = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name); w.deleteFile(); juce::AudioBuffer<float> b(1, 48000);
+                for (int i = 0; i < 48000; i++) b.setSample(0, i, 0.4f * (float)std::sin(i * 2 * 3.14159265358979 * hz / 48000)); juce::WavAudioFormat f;
+                std::unique_ptr<juce::AudioFormatWriter> wr(f.createWriterFor(new juce::FileOutputStream(w), 48000, 1, 16, {}, 0)); wr->writeFromAudioSampleBuffer(b, 0, 48000); return w; };
+            const juce::File w1 = wavOf(220, "undae-zone-a3.wav"), w2 = wavOf(880, "undae-zone-a5.wav");
+            ui::Doc dz(eng, *bank); dz.setProject(ui::blankProject()); const std::string id1 = dz.importAudio(w1), id2 = dz.importAudio(w2); w1.deleteFile(); w2.deleteFile();
+            auto renderZones = [&](std::vector<us::Zone> zones, std::vector<std::pair<int, double>> notes) {
+                us::Project zp = dz.p; zp.bpm = 120; auto zc = ui::newChannel(zp, "sample", "Multi", id1); zc.bus = "master"; zc.gate = true; zc.zones = zones; zp.channels.push_back(zc);
+                for (auto& [nt, at] : notes) { us::Note q; q.id = us::newId(); q.t = at * us::PPQ; q.d = us::PPQ; q.n = nt; q.v = 1; zp.patterns[0].notes[zc.id].push_back(q); }
+                us::Engine ez(bank); ez.prepare(48000, 512); ez.setProject(std::make_shared<us::Project>(zp));
+                auto b = ez.render(us::Mode::Pattern, zp.patterns[0].id, 1, 48000); std::vector<float> m((size_t)b.getNumSamples()); for (int i = 0; i < b.getNumSamples(); i++) m[(size_t)i] = b.getSample(0, i); return m; };
+            auto toneWin = [&](const std::vector<float>& v, double hz, double a, double b) { double c = 0, s2 = 0; const int i0 = (int)(a * sr), i1 = (int)(b * sr); for (int i = i0; i < i1; i++) { const double w = 2 * 3.14159265358979 * hz * i / sr; c += v[(size_t)i] * std::cos(w); s2 += v[(size_t)i] * std::sin(w); } return 2 * std::sqrt(c * c + s2 * s2) / (i1 - i0); };
+            us::Zone za; za.sample = id1; za.lo = 0; za.hi = 68; za.root = 57; us::Zone zb; zb.sample = id2; zb.lo = 69; zb.hi = 127; zb.root = 81;
+            auto split = renderZones({ za, zb }, { { 60, 0 }, { 76, 2 } });   // C4 from the A3 sample, E5 from the A5 sample (beat 2 = 1 s at 120 BPM)
+            const double c4 = toneWin(split, 261.63, 0.1, 0.4), e5 = toneWin(split, 659.26, 1.1, 1.4), wrong = toneWin(split, 659.26, 0.1, 0.4);
+            us::Zone r1 = za, r2 = za; r1.hi = r2.hi = 127; r2.gain = -12;
+            auto rr = renderZones({ r1, r2 }, { { 57, 0 }, { 57, 2 } });
+            auto rmsWin = [&](const std::vector<float>& v, double a, double b) { double s2 = 0; for (int i = (int)(a * sr); i < (int)(b * sr); i++) s2 += (double)v[(size_t)i] * v[(size_t)i]; return 10 * std::log10(s2 / ((b - a) * sr) + 1e-30); };
+            const double rrDiff = rmsWin(rr, 0.1, 0.4) - rmsWin(rr, 1.1, 1.4);
+            check(!id1.empty() && !id2.empty() && c4 > 0.05 && e5 > 0.05 && wrong < 0.005 && std::abs(rrDiff - 12) < 1,
+                  "zones: C4 plays from the low zone (" + std::to_string(c4) + "), E5 from the high zone (" + std::to_string(e5) + "), nothing crosses (" + std::to_string(wrong) + "); two overlapping zones take turns ("
+                  + std::to_string(rrDiff) + " dB apart, 12 set)");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

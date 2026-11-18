@@ -16,6 +16,7 @@ struct NoteOpts {
     double rel = 0, cut = 0, res = 0;   // per-note release / cutoff / resonance offsets, -1..1
     int glideFrom = -1;       // previous note on the channel (synth glide)
     double bpm = 120;
+    int root = -1; double zoneGain = 1;   // a multi-sample zone: its root note (-1: the channel's) and gain
 };
 
 class Voice {

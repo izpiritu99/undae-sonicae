@@ -85,6 +85,10 @@ Project parseProject(const juce::var& root) {
         const juce::var sy = c.getProperty("synth", juce::var()); if (sy.isObject()) ch.synth = synthOf(sy);
         if (const juce::var gr = c.getProperty("gran", juce::var()); gr.isObject()) { auto& G = ch.gran; G.on = flag(gr, "on", false); G.pos = num(gr, "pos", 0.3); G.scan = num(gr, "scan", 0); G.size = num(gr, "size", 0.08);
             G.density = num(gr, "density", 24); G.jitter = num(gr, "jitter", 0.03); G.spray = num(gr, "spray", 0); G.spread = num(gr, "spread", 0.6); G.rev = num(gr, "rev", 0); }
+        if (auto* zs = c.getProperty("zones", juce::var()).getArray()) for (auto& z : *zs) {
+            Zone Z; Z.sample = str(z, "sample", ""); Z.lo = (int)num(z, "lo", 0); Z.hi = (int)num(z, "hi", 127); Z.root = (int)num(z, "root", 60); Z.vlo = (int)num(z, "vlo", 0); Z.vhi = (int)num(z, "vhi", 127); Z.gain = num(z, "gain", 0);
+            if (!Z.sample.empty()) ch.zones.push_back(Z);
+        }
         ch.plug = c.getProperty("plug", juce::var()); ch.group = str(c, "group", "");
         pr.channels.push_back(std::move(ch));
     }
@@ -242,6 +246,9 @@ juce::var projectToVar(const Project& p) {
         if (c.gran.on || co->hasProperty("gran")) { juce::var g(new juce::DynamicObject()); auto* go = g.getDynamicObject(); const auto& G = c.gran;
             go->setProperty("on", G.on); go->setProperty("pos", G.pos); go->setProperty("scan", G.scan); go->setProperty("size", G.size); go->setProperty("density", G.density);
             go->setProperty("jitter", G.jitter); go->setProperty("spray", G.spray); go->setProperty("spread", G.spread); go->setProperty("rev", G.rev); co->setProperty("gran", g); }
+        if (!c.zones.empty() || co->hasProperty("zones")) { juce::Array<juce::var> zs; for (auto& Z : c.zones) { juce::var z(new juce::DynamicObject()); auto* zo = z.getDynamicObject();
+                zo->setProperty("sample", S(Z.sample)); zo->setProperty("lo", Z.lo); zo->setProperty("hi", Z.hi); zo->setProperty("root", Z.root); zo->setProperty("vlo", Z.vlo); zo->setProperty("vhi", Z.vhi); zo->setProperty("gain", Z.gain); zs.add(z); }
+            co->setProperty("zones", zs); }
         if (!c.plug.isVoid()) co->setProperty("plug", c.plug);
         if (!c.group.empty()) co->setProperty("group", S(c.group)); else co->removeProperty("group");
         chans.add(v);

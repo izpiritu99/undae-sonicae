@@ -210,9 +210,9 @@ class SampleVoice : public Voice {
 public:
     SampleVoice(SampleRef s, const Channel& C, int n, double vel, double t, double dur, const NoteOpts& o, double sr) : smp(C.rev ? s->reversed() : s) {
         note = n; t0 = t;
-        rate = std::pow(2.0, (n - C.root + C.tune) / 12.0); base = C.fine; bend.v = base + o.bend; bendBase = base + o.bend;
+        rate = std::pow(2.0, (n - (o.root >= 0 ? o.root : C.root) + C.tune) / 12.0); base = C.fine; bend.v = base + o.bend; bendBase = base + o.bend;
         off = clampd(C.start, 0, 0.98) * smp->seconds(); pos = off * smp->sr;
-        A = std::max(C.att, 0.001); R = std::max(C.rel, 0.005) * std::pow(4.0, o.rel); g = std::pow(vel, 1.5);
+        A = std::max(C.att, 0.001); R = std::max(C.rel, 0.005) * std::pow(4.0, o.rel); g = std::pow(vel, 1.5) * o.zoneGain;
         end = t0 + (smp->seconds() - off) / (rate * std::exp2(bend.v / 1200));
         if (o.cut < 0 || o.res != 0) { lp = true; for (auto& b : lpf) { b.type = FilterType::Lowpass; b.set(sr, 20000 * std::pow(2.0, std::min(0.0, o.cut) * 7), 0.707 * std::pow(4.0, o.res), 0); } }
         if (C.gate && dur >= 0) fade(t0 + dur, R / 4);
@@ -259,8 +259,8 @@ namespace {
 class GrainVoice : public Voice {
 public:
     GrainVoice(SampleRef s, const Channel& C, int n, double vel, double t, double dur, const NoteOpts& o, double sr_) : smp(s), G(C.gran), sr(sr_) {
-        note = n; t0 = t; rate = std::pow(2.0, (n - C.root + C.tune + C.fine / 100) / 12.0) * smp->sr / sr; bendC = o.bend;
-        A = std::max(C.att, 0.003); R = std::max(C.rel, 0.02) * std::pow(4.0, o.rel); g = std::pow(vel, 1.5) / std::sqrt(std::max(1.0, G.density * G.size * 0.6));
+        note = n; t0 = t; rate = std::pow(2.0, (n - (o.root >= 0 ? o.root : C.root) + C.tune + C.fine / 100) / 12.0) * smp->sr / sr; bendC = o.bend;
+        A = std::max(C.att, 0.003); R = std::max(C.rel, 0.02) * std::pow(4.0, o.rel); g = std::pow(vel, 1.5) * o.zoneGain / std::sqrt(std::max(1.0, G.density * G.size * 0.6));
         relAt = dur >= 0 ? t0 + dur : -1; end = relAt >= 0 ? relAt + R * 5 : 1e30; notePan = o.pan;
     }
     bool stereo() const override { return true; }

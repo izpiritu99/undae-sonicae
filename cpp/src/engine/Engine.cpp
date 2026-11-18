@@ -126,7 +126,7 @@ struct Engine::BusNode {
 };
 struct Engine::Strip {
     const Channel* c = nullptr; BusNode* bus = nullptr; std::shared_ptr<PluginInstance> plug;
-    std::vector<std::unique_ptr<Voice>> voices; std::vector<bool> stolen; int last = -1;
+    std::vector<std::unique_ptr<Voice>> voices; std::vector<bool> stolen; int last = -1; unsigned rr = 0;   // rr: round robin over zones
     std::vector<float> L, R, M; double vol = 0.8, pan = 0;
 };
 struct Engine::ClipPlay { SampleRef s; BusNode* bus; double t0, off, dur, gain; double ratio; };
@@ -228,7 +228,15 @@ struct Engine::Graph {
         } else if (c.type == "sample") {
             if (c.cut) killActive(s, t);
             while (activeCount(s, t) >= 24) killOldest(s, t);
-            v = makeSampleVoice(bank->get(c.sample), c, note, vel, t, dur, o, sr);
+            if (c.zones.empty()) v = makeSampleVoice(bank->get(c.sample), c, note, vel, t, dur, o, sr);
+            else {   // multi-sample: the zones that hold this note and velocity take turns
+                const int v127 = (int)std::lround(clampd(vel, 0, 1) * 127); auto fits = [&](const Zone& z) { return note >= z.lo && note <= z.hi && v127 >= z.vlo && v127 <= z.vhi; };
+                unsigned cnt = 0; for (auto& z : c.zones) cnt += fits(z);
+                if (!cnt) return nullptr;
+                unsigned pick = s.rr++ % cnt; const Zone* zz = nullptr; for (auto& z : c.zones) if (fits(z) && pick-- == 0) { zz = &z; break; }
+                o.root = zz->root; o.zoneGain = dbToGain(zz->gain);
+                v = makeSampleVoice(bank->get(zz->sample), c, note, vel, t, dur, o, sr);
+            }
         }
         if (!v) return nullptr;
         Voice* raw = v.get(); s.voices.push_back(std::move(v)); s.stolen.push_back(false);

@@ -134,6 +134,50 @@ private:
         G.knob("Spread", 0, 1, 0.6, c->gran.spread, live([Gr](double v) { Gr().spread = v; }), done(), false, pct);
         G.knob("Reverse", 0, 1, 0, c->gran.rev, live([Gr](double v) { Gr().rev = v; }), done(), false, pct);
         G.note("Plays the sample as a cloud of short grains: hold a note for a texture. Scan moves through the sample by itself; Jitter and Pitch spray scatter the grains.");
+        G.card("Zones (multi-sample)");
+        G.button("+ Zone", [this] { if (auto* x = ch()) { us::Zone z; z.sample = x->sample; z.root = x->root; x->zones.push_back(z); doc.commit(); } });
+        G.button(u8("Auto-map imported…"), [this] { autoMap(); })->setTooltip("Spread every imported sample across the keyboard by its pitch (from its name, such as \"Piano C4\", or by listening)");
+        if (c->zones.empty()) G.note("No zones: the channel plays the sound source above. Add zones to give different notes or velocities their own samples; zones that overlap take turns (round robin).");
+        auto nn = [](double v) { return juce::MidiMessage::getMidiNoteName((int)std::round(v), true, true, 4); };
+        for (size_t zi = 0; zi < c->zones.size(); zi++) {
+            auto Z = [this, zi]() -> us::Zone& { return ch()->zones[zi]; };
+            G.br();
+            auto* zp = new Pick({}, opts, juce::String(c->zones[zi].sample)); zp->onPick = [this, zi](const juce::String& v) { if (auto* x = ch()) if (zi < x->zones.size()) { x->zones[zi].sample = v.toStdString(); doc.commit(); } }; G.add(zp, 150, Pick::height());
+            G.knob("Low", 0, 127, 0, c->zones[zi].lo, live([Z](double v) { Z().lo = (int)std::round(v); }), done(), false, nn, 1);
+            G.knob("High", 0, 127, 127, c->zones[zi].hi, live([Z](double v) { Z().hi = (int)std::round(v); }), done(), false, nn, 1);
+            G.knob("Root", 0, 127, 60, c->zones[zi].root, live([Z](double v) { Z().root = (int)std::round(v); }), done(), false, nn, 1);
+            G.knob("Vel low", 0, 127, 0, c->zones[zi].vlo, live([Z](double v) { Z().vlo = (int)std::round(v); }), done(), false, {}, 1);
+            G.knob("Vel high", 0, 127, 127, c->zones[zi].vhi, live([Z](double v) { Z().vhi = (int)std::round(v); }), done(), false, {}, 1);
+            G.knob("Gain", -24, 12, 0, c->zones[zi].gain, live([Z](double v) { Z().gain = v; }), done(), false, [](double v) { return juce::String(v, 1) + " dB"; });
+            G.button(u8("✕"), [this, zi] { if (auto* x = ch()) if (zi < x->zones.size()) { x->zones.erase(x->zones.begin() + (long)zi); doc.commit(); } })->setTooltip("Remove this zone");
+        }
+    }
+    // a note name inside a sample's name ("Piano C#4", "bass_A1"), or -1
+    static int noteInName(const std::string& s) {
+        static const char* L = "CDEFGAB"; static const int pc[] = { 0, 2, 4, 5, 7, 9, 11 };
+        for (size_t i = 0; i < s.size(); i++) {
+            const char* p = std::strchr(L, std::toupper((unsigned char)s[i])); if (!p || !*p) continue;
+            if (i > 0 && std::isalpha((unsigned char)s[i - 1])) continue;
+            size_t j = i + 1; int n = pc[p - L]; if (j < s.size() && (s[j] == '#' || s[j] == 's')) { n++; j++; } else if (j < s.size() && s[j] == 'b') { n--; j++; }
+            bool neg = false; if (j < s.size() && s[j] == '-') { neg = true; j++; }
+            if (j < s.size() && std::isdigit((unsigned char)s[j])) { const int oct = (s[j] - '0') * (neg ? -1 : 1); if (j + 1 < s.size() && std::isalnum((unsigned char)s[j + 1])) continue; return juce::jlimit(0, 127, (oct + 1) * 12 + n); }
+        }
+        return -1;
+    }
+    void autoMap() {
+        auto* c = ch(); if (!c) return; std::vector<std::pair<int, std::string>> roots;
+        for (auto& s : doc.bank.imported()) {
+            int r = noteInName(s->name);
+            if (r < 0 && !s->ch.empty()) { auto mono = us::toMono(*s); std::vector<double> hits; const size_t W = (size_t)(s->sr * 0.06);
+                for (size_t off = 0; off + W < mono.size() && hits.size() < 30; off += W / 2) { std::vector<float> seg(mono.begin() + (long)off, mono.begin() + (long)(off + W)); const double m = us::pitchOf(seg, s->sr); if (m > 0) hits.push_back(m); }
+                if (hits.size() >= 2) { std::sort(hits.begin(), hits.end()); r = (int)std::round(hits[hits.size() / 2]); } }
+            if (r >= 0) roots.push_back({ r, s->id });
+        }
+        if (roots.empty()) { toast("No imported samples with a pitch to map (upload some, or name them like \"Piano C4\")"); return; }
+        std::sort(roots.begin(), roots.end()); c->zones.clear();
+        for (size_t i = 0; i < roots.size(); i++) { us::Zone z; z.sample = roots[i].second; z.root = roots[i].first;
+            z.lo = i == 0 ? 0 : (roots[i - 1].first + roots[i].first) / 2 + 1; z.hi = i + 1 == roots.size() ? 127 : (roots[i].first + roots[i + 1].first) / 2; c->zones.push_back(z); }
+        doc.commit(); toast("Mapped " + juce::String((int)roots.size()) + " samples across the keyboard");
     }
     std::unique_ptr<juce::FileChooser> chooser;
     void upload() {

@@ -962,6 +962,13 @@ modal models, arpeggiator / step sequencer, original preset banks).
   engine's seeded generator, so exports repeat. Checks: grains of a 440 Hz sample stay on 440 Hz (8 dB over the
   neighbouring semitones: overlapping grains spread the pitch a little) and follow the keyboard an octave up (32 dB);
   silence 0.15 s after the release; the settings survive save and reload.
+- **Multi-sample zones** (self-test 42 / 42): `Channel::zones` (saved as "zones": sample, lo / hi note, root, vlo / vhi
+  velocity, gain dB). When present they replace the channel's single sample; zones holding the same note and velocity
+  take turns (round robin, `rr` in the channel strip). Zone root and gain reach the voice through `NoteOpts`, so
+  granular mode works per zone too. Sampler panel: Zones card with + Zone, per-zone sample / range / root / velocity /
+  gain / remove, and "Auto-map imported..." (roots from note names in the sample names, else by pitch detection;
+  ranges split halfway between roots). Check, rendered through the engine: C4 plays from the A3 zone, E5 from the A5
+  zone, nothing crosses; two overlapping zones alternate (12.0 dB apart as set). Seen in the app window.
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -977,7 +984,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (41 after the granular sampler; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (42 after the zones; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
@@ -985,7 +992,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
    `autopan`, `lofi`). The synth's "wt:" wave names and the five wavetable presets also need porting to
-   `synth.js` (unknown waves there fall back to sine), and the sampler's "gran" settings to the Electron engine. Until then, do not open projects that use them in the Electron app.
+   `synth.js` (unknown waves there fall back to sine), and the sampler's "gran" and "zones" settings to the Electron engine. Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).
