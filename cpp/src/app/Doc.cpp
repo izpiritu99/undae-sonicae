@@ -68,6 +68,9 @@ const std::vector<FxSpec>& fxSpecs() {
         { "rotary", "Rotary speaker", { { "speed", "Speed", 0, 0, 0, false, { "slow", "fast", "stop" } }, { "drive", "Drive", 0, 1, 0, false, {} }, { "width", "Width", 0, 1, 1, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
         { "autopan", "Auto-pan", { { "mode", "Moves", 0, 0, 0, false, { "tremolo", "pan" } }, { "shape", "Shape", 0, 0, 0, false, { "sine", "triangle", "square" } },
             { "sync", "Rate", 0, 0, 0, false, { "1/8", "1/16", "1/8 triplet", "1/4", "1/2", "1 bar", "free" } }, { "rate", "Free Hz", 0.05, 20, 4, true, {} }, { "depth", "Depth", 0, 1, 0.5, false, {} } } },
+        { "lofi", "Lo-fi", { { "dither", "Dither", 0, 0, 0, false, { "off", "on" } }, { "rate", "Sample rate", 1000, 48000, 12000, true, {} }, { "bits", "Bits", 2, 16, 12, false, {} },
+            { "wow", "Wow", 0, 1, 0, false, {} }, { "noise", "Noise", 0, 1, 0, false, {} }, { "crackle", "Crackle", 0, 1, 0, false, {} },
+            { "lo", "Low cut", 20, 1000, 60, true, {} }, { "hi", "High cut", 1000, 20000, 9000, true, {} }, { "narrow", "Narrow", 0, 1, 0, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
     };
     return v;
 }

@@ -1022,6 +1022,46 @@ public:
     }
 };
 
+// Lo-fi: sample-rate reduction (sample and hold, no anti-alias filter, so the images and aliasing stay), bit depth
+// (optionally with TPDF dither), wow and flutter (a slowly swept delay), generated record-surface noise and crackle
+// (random clicks through a resonant band-pass, the same on every run), band-limiting (24 dB/oct low and high cuts) and
+// narrowing toward mono.
+class LoFi : public Effect {
+    DelayLine dl, dr; Biquad2 lc1, lc2, hc1, hc2; Biquad ck; Biquad2 hiss; Rng rng{ 4242 };
+    double rate = 12000, bits = 12, crackle = 0, noise = 0, wow = 0, lo = -1, hi = -1, narrow = 0, ph = 1, hl = 0, hr = 0, w1 = 0, w2 = 0; bool dither = false; WetDry m;
+public:
+    void prepare(double s, int b) override {
+        Effect::prepare(s, b); dl.init((size_t)(0.03 * s) + 8); dr.init((size_t)(0.03 * s) + 8); lo = hi = -1;
+        ck.type = FilterType::Bandpass; ck.set(s, 2500, 1.5, 0); hiss.setType(FilterType::Lowpass); hiss.set(s, 5000, Q_BW2, 0);
+    }
+    void set(const FxSlot& f) override {
+        rate = f.num("rate", 12000); bits = f.num("bits", 12); dither = f.str("dither", "off") == "on"; crackle = f.num("crackle", 0); noise = f.num("noise", 0); wow = f.num("wow", 0); narrow = f.num("narrow", 0); m.mix(f.num("mix", 1));
+        const double l = f.num("lo", 60), h = f.num("hi", 9000);
+        if (l != lo || h != hi) { lo = l; hi = h; for (Biquad2* q : { &lc1, &lc2 }) { q->setType(FilterType::Highpass); q->set(sr, lo, Q_BW2, 0); } for (Biquad2* q : { &hc1, &hc2 }) { q->setType(FilterType::Lowpass); q->set(sr, hi, Q_BW2, 0); } }
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double step = std::min(1.0, rate / sr), q = std::pow(2.0, bits - 1), clickP = crackle * crackle * 0.0008 * 48000 / sr;
+        for (int i = 0; i < n; i++) {
+            double l = L[i], r = R[i];
+            if (wow > 0) {   // wow (0.55 Hz) and flutter (6.1 Hz) on a delay around 8 ms
+                w1 += 0.55 / sr; w1 -= std::floor(w1); w2 += 6.1 / sr; w2 -= std::floor(w2);
+                const double d = 0.008 * sr + wow * (0.0025 * sr * std::sin(2 * PI * w1) + 0.0002 * sr * std::sin(2 * PI * w2));
+                dl.push((float)l); dr.push((float)r); l = dl.read(d); r = dr.read(d);
+            }
+            ph += step; if (ph >= 1) { ph -= 1; hl = l; hr = r; } l = hl; r = hr;                      // sample and hold
+            if (bits < 16) { const double dl2 = dither ? (rng.next() + rng.next() - 1) : 0, dr2 = dither ? (rng.next() + rng.next() - 1) : 0; l = std::round(l * q + dl2) / q; r = std::round(r * q + dr2) / q; }
+            double c = 0; if (crackle > 0 && rng.next() < clickP) c = (rng.next() * 0.25 + 0.05) * (rng.next() < 0.5 ? -1 : 1) * crackle * 8;
+            c = ck.tick(c);
+            float nl = 0, nr = 0; if (noise > 0) { nl = (float)(rng.bi() * noise * 0.03); nr = (float)(rng.bi() * noise * 0.03); hiss.tick(nl, nr); }
+            l += c + nl; r += c * 0.9 + nr;
+            float fl = (float)l, fr = (float)r; lc1.tick(fl, fr); lc2.tick(fl, fr); hc1.tick(fl, fr); hc2.tick(fl, fr);
+            const double mid = 0.5 * (fl + fr), side = 0.5 * (fl - fr) * (1 - narrow);
+            L[i] = (float)(L[i] * m.dry + (mid + side) * m.wet); R[i] = (float)(R[i] * m.dry + (mid - side) * m.wet);
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -1060,6 +1100,7 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "fshift") return std::make_unique<FreqShift>();
     if (t == "rotary") return std::make_unique<Rotary>();
     if (t == "autopan") return std::make_unique<AutoPan>();
+    if (t == "lofi") return std::make_unique<LoFi>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 

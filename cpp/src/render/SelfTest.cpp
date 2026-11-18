@@ -320,6 +320,22 @@ int main(int argc, char** argv) {
                   + "), shifter 1000 -> 1100 Hz at " + std::to_string(up) + " (900 Hz " + std::to_string(mirror) + "), rotary moves " + std::to_string(rhi - rlo) + " dB, tremolo dips "
                   + std::to_string(onBeat - offBeat) + " dB off the beat, auto-pan " + std::to_string(panL) + " dB side to side");
         }
+        // lo-fi: sample-and-hold images, bit levels, crackle on silence (the same every run), band-limiting
+        {
+            auto clean = [&](us::FxSlot f) { f.p.set("lo", 20.0); f.p.set("hi", 20000.0); return f; };
+            auto sh = clean(ui::newFx("lofi")); sh.p.set("rate", 8000.0); sh.p.set("bits", 16.0);
+            const double image = tone(runFx(sh, sine(1000, 0.5)), 7000);
+            auto bt = clean(ui::newFx("lofi")); bt.p.set("rate", 48000.0); bt.p.set("bits", 4.0); auto bo = runFx(bt, sine(440, 0.9));
+            auto b16 = bt; b16.p.set("bits", 16.0); auto ref = runFx(b16, sine(440, 0.9)); std::vector<float> err((size_t)N); for (int i = 0; i < N; i++) err[(size_t)i] = bo[(size_t)i] - ref[(size_t)i];
+            const double snr = lvl(ref) - lvl(err);   // 4 bits on a near-full sine: about 6.02 x 4 + 1.76 = 26 dB
+            auto ck = clean(ui::newFx("lofi")); ck.p.set("rate", 48000.0); ck.p.set("bits", 16.0); ck.p.set("crackle", 1.0); std::vector<float> zero((size_t)N, 0.f);
+            auto c1 = runFx(ck, zero), c2 = runFx(ck, zero); float cpk = 0; for (float v : c1) cpk = std::max(cpk, std::abs(v));
+            auto bl = ui::newFx("lofi"); bl.p.set("rate", 48000.0); bl.p.set("bits", 16.0); bl.p.set("hi", 3000.0);
+            const double cut10k = lvl(runFx(bl, sine(10000, 0.5))) - lvl(sine(10000, 0.5)), pass1k = lvl(runFx(bl, sine(1000, 0.5))) - lvl(sine(1000, 0.5));
+            check(image > 0.05 && snr > 20 && snr < 32 && cpk > 0.01f && c1 == c2 && cut10k < -30 && std::abs(pass1k) < 1,
+                  "lo-fi: 8 kHz sample and hold leaves a 7 kHz image (" + std::to_string(image) + "), 4 bits leaves the signal " + std::to_string(snr) + " dB above its quantising noise (about 26), crackle peaks "
+                  + std::to_string(cpk) + " on silence the same every run, the 3 kHz high cut takes 10 kHz down " + std::to_string(-cut10k) + " dB");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

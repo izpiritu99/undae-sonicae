@@ -938,6 +938,16 @@ Next: modulation extras (14), lo-fi (15), then the instruments.
     Check: at 1/4 and depth 1 the level dips 67 dB halfway between beats; pan swings the sides 63 dB apart.
 Next: lo-fi (15), then the instruments.
 
+- **Lo-fi** (`lofi`, item 15), self-test 39 / 39: sample and hold down to 1 kHz (no anti-alias filter, on purpose),
+  2-16 bits with optional TPDF dither, wow and flutter, generated surface noise and crackle (seeded, repeatable),
+  24 dB/oct low / high cut, narrowing toward mono. Checks: 8 kHz sample and hold leaves the 7 kHz image of a 1 kHz tone;
+  4 bits leaves a near-full sine 26.6 dB above its quantising noise (theory 26); crackle on silence is identical on
+  two runs; the 3 kHz high cut takes 10 kHz down 47 dB.
+
+All fifteen effect gaps from the list are now filled: 19 new built-in effect types, 30 with the original eleven.
+Next: the instruments (wavetable mode for the synth, granular sampler, multi-sample instrument, plucked string /
+modal models, arpeggiator / step sequencer, original preset banks).
+
 ## Linux catch-up list (for later; work is Windows-only for now)
 
 The owner is working on Windows only for now (Android work is fine from Windows: the SDK, Android Studio, the emulator
@@ -952,14 +962,14 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (38 after the modulation effects; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (39 after lo-fi; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
 4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
-   `autopan`). Until then, do not open projects that use them in the Electron app.
+   `autopan`, `lofi`). Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).
