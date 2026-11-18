@@ -199,4 +199,23 @@ double pitchOf(const std::vector<float>& in, double sr) {
     std::vector<double> d((size_t)tMax + 2); const double tau = yin(x, 0, W, std::max(2, (int)std::floor(rate / 1500)), tMax, d);
     return tau > 0 ? 69 + 12 * std::log2(rate / tau / 440) : -1;
 }
+// Energy-rise onsets: 5.8 ms hops of a 11.6 ms RMS window; a hit is a rise of `need` dB over the quietest of the last
+// four hops, above -45 dBFS and at least 60 ms after the previous one, moved to where the hit actually starts.
+std::vector<double> detectOnsets(const std::vector<float>& x, double sr, double sens, size_t maxHits) {
+    std::vector<double> out{ 0.0 }; const int hop = std::max(64, (int)(sr * 0.0058)), W = hop * 2; if ((int)x.size() < W * 2) return out;
+    std::vector<double> db; for (size_t o = 0; o + (size_t)W <= x.size(); o += (size_t)hop) { double s2 = 0; for (int i = 0; i < W; i++) s2 += (double)x[o + (size_t)i] * x[o + (size_t)i]; db.push_back(10 * std::log10(s2 / W + 1e-12)); }
+    const double need = 6 + (1 - std::clamp(sens, 0.0, 1.0)) * 12; double last = -1;
+    for (size_t k = 4; k < db.size() && out.size() < maxHits; k++) {
+        double lo = db[k - 1]; for (size_t j = k - 4; j < k; j++) lo = std::min(lo, db[j]);
+        const double t = (double)(k * (size_t)hop) / sr;
+        if (db[k] > -45 && db[k] - lo > need && (last < 0 || t - last > 0.06) && t > 0.03) {
+            // refine: the first sample that reaches a tenth of the hit's peak, less a 0.7 ms lead-in
+            const size_t s0 = k * (size_t)hop, s1 = std::min(x.size(), s0 + (size_t)W * 2); float pk = 0; for (size_t i = s0; i < s1; i++) pk = std::max(pk, std::abs(x[i]));
+            size_t at = s0; for (size_t i = s0; i < s1; i++) if (std::abs(x[i]) >= pk * 0.1f) { at = i; break; }
+            const double tr = std::max(0.0, (double)at - sr * 0.0007) / sr; out.push_back(tr); last = tr;
+        }
+    }
+    return out;
+}
+
 }   // namespace us

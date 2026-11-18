@@ -1027,8 +1027,16 @@ pitch shifter, auto-filter (envelope / LFO wah), amp simulator, sub-bass enhance
   through an imported click-plus-echo impulse comes out 512 samples late with the echo exactly 0.1 s after, at 0.53 of
   the level (0.5 set; resampling 44.1 to 48 kHz spreads the peak a little).
 
-Second round done. Next ideas: a beat slicer for sample channels (cut a loop at its hits, one slice per key, and
-write the pattern that replays it).
+Second round done.
+
+- **Beat slicer** (self-test 50 / 50): `Channel::slice` / `slices` (saved as "slice" / "slices", start times in
+  seconds). Key root + k plays slice k at its own speed (Tune changes the speed of all), with a short fade at its
+  end; keys outside the slices are silent. `detectOnsets()` in `Analysis.cpp` finds hits (energy rise over the last
+  four 5.8 ms hops, then moved to where the hit really starts, less a 0.7 ms lead-in). Sampler panel card "Slicer":
+  Sensitivity, Find hits, Cut in 8 / 16, Write pattern (fills the current pattern with the slices in their original
+  places, so the loop plays and can be rearranged). Check: four hits 0.25 s apart are found within 1 ms; key root+2
+  plays only the third slice and stops at its end; keys outside are silent.
+- The self-test now flushes each line, so a crash still shows how far it got.
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -1044,7 +1052,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (49 after the IR reverb; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (50 after the beat slicer; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
@@ -1052,7 +1060,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
    `autopan`, `lofi`, `pitchshift`, `doubler`, `autofilter`, `amp`, `subgen`, `dyneq`, `irverb`). The synth's "wt:" wave names and the five wavetable presets also need porting to
-   `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp" to the Electron engine. Until then, do not open projects that use them in the Electron app.
+   `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp", "slice" / "slices" to the Electron engine. Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).

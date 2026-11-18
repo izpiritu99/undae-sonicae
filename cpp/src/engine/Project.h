@@ -51,6 +51,7 @@ struct Channel {
     std::string bus = "master"; int root = 60; std::string sample = "inst:keys";
     double tune = 0, fine = 0, start = 0, att = 0, rel = 0.08; bool gate = false, rev = false, cut = false; int choke = 0;
     ArpP arp;
+    bool slice = false; std::vector<double> slices;   // beat slicer: start times (s) of the slices; key root + k plays slice k
     GranP gran; std::vector<Zone> zones;   // zones, when present, replace `sample`
     std::optional<SynthP> synth;
     juce::var plug;   // plug-in slot { path, pid, name, fmt, state, v<id>... }

@@ -89,6 +89,7 @@ Project parseProject(const juce::var& root) {
             G.density = num(gr, "density", 24); G.jitter = num(gr, "jitter", 0.03); G.spray = num(gr, "spray", 0); G.spread = num(gr, "spread", 0.6); G.rev = num(gr, "rev", 0); }
         if (const juce::var ar = c.getProperty("arp", juce::var()); ar.isObject()) { auto& A = ch.arp; A.on = flag(ar, "on", false); A.mode = str(ar, "mode", "up"); A.rate = str(ar, "rate", "1/16");
             A.oct = (int)num(ar, "oct", 1); A.gate = num(ar, "gate", 0.6); A.steps = (int)num(ar, "steps", 0xFFFF); A.len = (int)num(ar, "len", 16); }
+        ch.slice = flag(c, "slice", false); if (auto* sl = c.getProperty("slices", juce::var()).getArray()) for (auto& v : *sl) ch.slices.push_back((double)v);
         if (auto* zs = c.getProperty("zones", juce::var()).getArray()) for (auto& z : *zs) {
             Zone Z; Z.sample = str(z, "sample", ""); Z.lo = (int)num(z, "lo", 0); Z.hi = (int)num(z, "hi", 127); Z.root = (int)num(z, "root", 60); Z.vlo = (int)num(z, "vlo", 0); Z.vhi = (int)num(z, "vhi", 127); Z.gain = num(z, "gain", 0);
             if (!Z.sample.empty()) ch.zones.push_back(Z);
@@ -255,6 +256,7 @@ juce::var projectToVar(const Project& p) {
         if (c.arp.on || co->hasProperty("arp")) { juce::var g(new juce::DynamicObject()); auto* go = g.getDynamicObject(); const auto& A = c.arp;
             go->setProperty("on", A.on); go->setProperty("mode", S(A.mode)); go->setProperty("rate", S(A.rate)); go->setProperty("oct", A.oct); go->setProperty("gate", A.gate);
             go->setProperty("steps", A.steps); go->setProperty("len", A.len); co->setProperty("arp", g); }
+        if (c.slice || !c.slices.empty() || co->hasProperty("slices")) { co->setProperty("slice", c.slice); juce::Array<juce::var> sl; for (double v : c.slices) sl.add(v); co->setProperty("slices", sl); }
         if (!c.zones.empty() || co->hasProperty("zones")) { juce::Array<juce::var> zs; for (auto& Z : c.zones) { juce::var z(new juce::DynamicObject()); auto* zo = z.getDynamicObject();
                 zo->setProperty("sample", S(Z.sample)); zo->setProperty("lo", Z.lo); zo->setProperty("hi", Z.hi); zo->setProperty("root", Z.root); zo->setProperty("vlo", Z.vlo); zo->setProperty("vhi", Z.vhi); zo->setProperty("gain", Z.gain); zs.add(z); }
             co->setProperty("zones", zs); }

@@ -27,6 +27,8 @@ std::vector<Note> toTicks(const std::vector<FoundNote>& notes, double bpm, int q
 const std::vector<std::pair<std::string, std::vector<int>>>& scales();
 int snapToScale(int n, int root, const std::string& scale);
 extern const char* const NOTE_NAMES[12];
-double pitchOf(const std::vector<float>& x, double sr);   // live tuner: MIDI note (fractional) or -1
+double pitchOf(const std::vector<float>& x, double sr);
+// hits in a sound (the beat slicer): start times in seconds, the first always 0; sens 0..1 (higher finds softer hits)
+std::vector<double> detectOnsets(const std::vector<float>& x, double sr, double sens = 0.5, size_t maxHits = 64);   // live tuner: MIDI note (fractional) or -1
 
 }   // namespace us

@@ -135,6 +135,13 @@ private:
         G.knob("Spread", 0, 1, 0.6, c->gran.spread, live([Gr](double v) { Gr().spread = v; }), done(), false, pct);
         G.knob("Reverse", 0, 1, 0, c->gran.rev, live([Gr](double v) { Gr().rev = v; }), done(), false, pct);
         G.note("Plays the sample as a cloud of short grains: hold a note for a texture. Scan moves through the sample by itself; Jitter and Pitch spray scatter the grains.");
+        G.card("Slicer", c->slice, [this](bool b) { if (auto* x = ch()) { x->slice = b; if (b && x->slices.empty()) sliceHits(); doc.commit(); } });
+        G.knob("Sensitivity", 0, 1, 0.5, sliceSens, [this](double v) { sliceSens = v; }, [this] {}, false, pct);
+        G.button("Find hits", [this] { sliceHits(); if (auto* x = ch()) { x->slice = true; doc.commit(); } })->setTooltip("Cut the sound where its hits start");
+        G.button("Cut in 8", [this] { sliceEven(8); }); G.button("Cut in 16", [this] { sliceEven(16); });
+        G.button("Write pattern", [this] { slicePattern(); })->setTooltip("Fill the current pattern with the slices in their original places, so the loop plays back and can be rearranged");
+        G.note(c->slices.empty() ? juce::String("Cuts a loop into slices, one per key from the root note up: rearrange the notes to remix the loop. Tune changes the speed of every slice.")
+                                 : juce::String((int)c->slices.size()) + " slices on keys " + juce::MidiMessage::getMidiNoteName(c->root, true, true, 4) + " to " + juce::MidiMessage::getMidiNoteName(c->root + (int)c->slices.size() - 1, true, true, 4) + ".");
         G.card("Zones (multi-sample)");
         G.button("+ Zone", [this] { if (auto* x = ch()) { us::Zone z; z.sample = x->sample; z.root = x->root; x->zones.push_back(z); doc.commit(); } });
         G.button(u8("Auto-map imported…"), [this] { autoMap(); })->setTooltip("Spread every imported sample across the keyboard by its pitch (from its name, such as \"Piano C4\", or by listening)");
@@ -164,6 +171,18 @@ private:
             if (j < s.size() && std::isdigit((unsigned char)s[j])) { const int oct = (s[j] - '0') * (neg ? -1 : 1); if (j + 1 < s.size() && std::isalnum((unsigned char)s[j + 1])) continue; return juce::jlimit(0, 127, (oct + 1) * 12 + n); }
         }
         return -1;
+    }
+    double sliceSens = 0.5;
+    void sliceHits() { auto* c = ch(); if (!c) return; auto smp = doc.bank.get(c->sample); if (!smp || smp->ch.empty()) return; c->slices = us::detectOnsets(us::toMono(*smp), smp->sr, sliceSens); toast(juce::String((int)c->slices.size()) + " slices"); }
+    void sliceEven(int n) { auto* c = ch(); if (!c) return; auto smp = doc.bank.get(c->sample); if (!smp) return; c->slices.clear(); for (int k = 0; k < n; k++) c->slices.push_back(smp->seconds() * k / n); c->slice = true; doc.commit(); }
+    void slicePattern() {
+        auto* c = ch(); if (!c || c->slices.empty()) { toast("Find the hits first"); return; } auto smp = doc.bank.get(c->sample); if (!smp) return;
+        us::Pattern* pt = nullptr; for (auto& x : doc.p.patterns) if (x.id == doc.pat) pt = &x; if (!pt) return;
+        const double spt = doc.p.secondsPerTick() * std::pow(2.0, c->tune / 12.0); auto& ns = pt->notes[c->id]; ns.clear();
+        for (size_t k = 0; k < c->slices.size(); k++) { const double a0 = c->slices[k], a1 = k + 1 < c->slices.size() ? c->slices[k + 1] : smp->seconds();
+            us::Note n; n.id = us::newId(); n.t = std::round(a0 / spt); n.d = std::max(1.0, std::round((a1 - a0) / spt)); n.n = c->root + (int)k; n.v = 0.8; ns.push_back(n); }
+        const double endT = smp->seconds() / spt; pt->bars = std::max(pt->bars, std::ceil(endT / doc.p.bar())); c->slice = true; doc.commit();
+        toast("Wrote " + juce::String((int)c->slices.size()) + " slices into " + juce::String(pt->name));
     }
     void autoMap() {
         auto* c = ch(); if (!c) return; std::vector<std::pair<int, std::string>> roots;

@@ -272,6 +272,11 @@ public:
         if (o.cut < 0 || o.res != 0) { lp = true; for (auto& b : lpf) { b.type = FilterType::Lowpass; b.set(sr, 20000 * std::pow(2.0, std::min(0.0, o.cut) * 7), 0.707 * std::pow(4.0, o.res), 0); } }
         if (C.gate && dur >= 0) fade(t0 + dur, R / 4);
         gate = C.gate; notePan = o.pan;
+        if (C.slice && !C.slices.empty()) {   // beat slicer: this key plays one slice at its own speed, then a short fade
+            const size_t k = (size_t)(n - (o.root >= 0 ? o.root : C.root)); const double a0 = C.slices[k], a1 = k + 1 < C.slices.size() ? C.slices[k + 1] : smp->seconds();
+            rate = std::pow(2.0, C.tune / 12.0); off = C.rev ? std::max(0.0, smp->seconds() - a1) : a0; pos = off * smp->sr;
+            end = t0 + (smp->seconds() - off) / (rate * std::exp2(bend.v / 1200)); fade(t0 + std::max(0.002, (a1 - a0) / rate - 0.004), 0.0008);
+        }
     }
     bool stereo() const override { return smp->ch.size() > 1 || notePan != 0; }   // a per-note pan makes a stereo panner
     void release(double t) override { if (gate) fade(t, R / 4); released = true; }
@@ -363,6 +368,7 @@ private:
 std::unique_ptr<Voice> makeSynthVoice(const SynthP& P, int note, double vel, double t, double dur, const NoteOpts& o, double sr) { return std::make_unique<SynthVoice>(P, note, vel, t, dur, o, sr); }
 std::unique_ptr<Voice> makeSampleVoice(SampleRef smp, const Channel& C, int note, double vel, double t, double dur, const NoteOpts& o, double sr) {
     if (!smp || smp->length() < 2) return nullptr;
+    if (C.slice && !C.slices.empty()) { const int k = note - (o.root >= 0 ? o.root : C.root); if (k < 0 || k >= (int)C.slices.size() || C.slices[(size_t)k] >= smp->seconds()) return nullptr; }
     if (C.gran.on && smp->length() > 64) return std::make_unique<GrainVoice>(smp, C, note, vel, t, dur, o, sr);
     return std::make_unique<SampleVoice>(smp, C, note, vel, t, dur, o, sr);
 }

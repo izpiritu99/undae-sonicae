@@ -12,7 +12,7 @@
 #include "app/Presets.h"
 
 static int fails = 0;
-static void check(bool ok, const std::string& what) { std::cout << (ok ? "PASS  " : "FAIL  ") << what << "\n"; if (!ok) fails++; }
+static void check(bool ok, const std::string& what) { std::cout << (ok ? "PASS  " : "FAIL  ") << what << std::endl; if (!ok) fails++; }   // flushed: a crash still shows how far the run got
 
 // run the engine like an audio device would, n blocks; returns the peak
 static float run(us::Engine& e, int blocks, std::function<void()> collect = {}) {
@@ -499,6 +499,24 @@ int main(int argc, char** argv) {
             const double ratio = std::abs(L[(size_t)p2]) / std::max(1e-9f, std::abs(L[(size_t)p1]));
             check(!irId.empty() && p1 == 512 && std::abs((p2 - p1) - 4800) <= 2 && std::abs(ratio - 0.5) < 0.05, "IR reverb: a click through an imported impulse comes out at " + std::to_string(p1)
                   + " samples (the convolver latency, 512) with its echo " + std::to_string(p2 - p1) + " samples later (0.1 s at 48 kHz: 4800) at " + std::to_string(ratio) + " of the level (0.5)");
+        }
+        // beat slicer: four hits (200, 400, 800, 1600 Hz bursts every 0.25 s) are found, and key root + 2 plays only the third
+        {
+            auto loop = std::make_shared<us::Sample>(); loop->sr = 48000; loop->ch.assign(1, std::vector<float>(48000, 0.f));
+            const double fq[] = { 200, 400, 800, 1600 };
+            for (int h = 0; h < 4; h++) for (int i = 0; i < 9000; i++) loop->ch[0][(size_t)(h * 12000 + i)] = (float)(0.7 * std::exp(-i / 2500.0) * std::sin(2 * 3.14159265358979 * fq[h] * i / 48000));
+            auto on = us::detectOnsets(loop->ch[0], 48000, 0.5);
+            bool found = on.size() == 4; for (size_t k = 1; k < on.size() && k < 4; k++) found &= std::abs(on[k] - k * 0.25) < 0.003;
+            us::Channel C; C.root = 60; C.slice = true; C.slices = on.size() == 4 ? on : std::vector<double>{ 0, 0.25, 0.5, 0.75 };
+            us::NoteOpts o; auto v = us::makeSampleVoice(loop, C, 62, 1.0, 0, 1.0, o, sr); std::vector<float> L((size_t)N, 0.f), R((size_t)N, 0.f), M((size_t)N, 0.f);   // a mono sample voice writes M
+            for (int off = 0; off < N; off += 512) v->render(L.data() + off, R.data() + off, M.data() + off, std::min(512, N - off), off / sr, sr);
+            std::vector<float> m((size_t)N); for (int i = 0; i < N; i++) m[(size_t)i] = L[(size_t)i] + R[(size_t)i] + M[(size_t)i];
+            auto toneW = [&](double hz, double a, double b) { double c = 0, s2 = 0; for (int i = (int)(a * sr); i < (int)(b * sr); i++) { const double w = 2 * 3.14159265358979 * hz * i / sr; c += m[(size_t)i] * std::cos(w); s2 += m[(size_t)i] * std::sin(w); } return 2 * std::sqrt(c * c + s2 * s2) / ((b - a) * sr); };
+            const double third = toneW(800, 0.0, 0.1), first = toneW(200, 0.0, 0.1), after = toneW(1600, 0.26, 0.4);
+            const bool outOfRange = !us::makeSampleVoice(loop, C, 64, 1.0, 0, 1.0, o, sr) && !us::makeSampleVoice(loop, C, 59, 1.0, 0, 1.0, o, sr);
+            juce::String ons; for (double t : on) ons << juce::String(t, 3) << " ";
+            check(found && third > 0.05 && first < third * 0.02 && after < third * 0.02 && outOfRange, "beat slicer: hits found at " + ons.toStdString() + "s (0, 0.25, 0.5, 0.75); key root+2 plays only the third slice (800 Hz "
+                  + std::to_string(third) + ", 200 Hz " + std::to_string(first) + ") and stops at its end; keys outside the slices stay silent");
         }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
