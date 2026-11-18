@@ -8,6 +8,8 @@ namespace ui {
 // Buttons that open a menu on right-click check this too, so a long press opens the same menu.
 inline bool& touchMenu() { static bool f = false; return f; }
 inline bool wantsMenu() { return juce::ModifierKeys::currentModifiers.isPopupMenu() || touchMenu(); }
+// a component (or a parent of the one under the finger) that handles a long press itself, instead of a synthetic right-click
+struct LongPressTarget { virtual void longPress() = 0; virtual ~LongPressTarget() = default; };
 inline std::function<bool(juce::Button*)>& longPressHook() { static std::function<bool(juce::Button*)> f; return f; }   // buttons with their own right-click action
 
 class TouchHelper : public juce::MouseListener, private juce::Timer {
@@ -59,6 +61,8 @@ private:
             juce::Timer::callAfterDelay(400, [sb] { if (sb) sb->setEnabled(true); });
             return;
         }
+        // a knob (the finger lands on its inner dial, which ignores right-clicks): open the knob's own menu
+        for (juce::Component* p = c; p; p = p->getParentComponent()) if (auto* t = dynamic_cast<LongPressTarget*>(p)) { t->longPress(); return; }
         // anything else: the same as a right-click where the finger is
         const auto local = c->getLocalPoint(nullptr, press.at).toFloat(); auto src = juce::Desktop::getInstance().getMainMouseSource();
         const juce::ModifierKeys rb(juce::ModifierKeys::rightButtonModifier);

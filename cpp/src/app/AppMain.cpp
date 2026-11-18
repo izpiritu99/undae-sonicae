@@ -91,11 +91,13 @@ class Main;
 class Deck : public juce::Component {
 public:
     std::string id, cur; std::function<std::unique_ptr<juce::Component>(const std::string&)> make; std::function<void(Deck&, const std::string&)> onTab;
-    bool floating = false; std::function<void()> onClose; std::function<void(juce::Point<int>)> onDrag;
+    bool floating = false, minimized = false; std::function<void()> onClose, onMinimize; std::function<void(juce::Point<int>)> onDrag;
     Deck(std::string i) : id(std::move(i)) {
         tabView.setViewedComponent(&tabRow, false); tabView.setScrollBarsShown(false, false, false, true); tabView.setScrollOnDragMode(juce::Viewport::ScrollOnDragMode::all); addAndMakeVisible(tabView);
         for (auto& v : views()) { auto* b = tabs.add(new Btn(v.label, Btn::Tab, v.icon)); b->setTooltip(v.label); const std::string vid = v.id; b->onClick = [this, vid] { if (onTab) onTab(*this, vid); }; tabRow.addAndMakeVisible(b); }
         addChildComponent(closeB); closeB.setTooltip("Close the floating deck"); closeB.onClick = [this] { if (onClose) onClose(); };
+        // minimize sits at the far left, away from close at the far right, so a slip of the finger does not close the deck
+        addChildComponent(minB); minB.setTooltip("Minimize the floating deck to its tab bar (tap again to restore)"); minB.onClick = [this] { if (onMinimize) onMinimize(); };
         tabRow.addMouseListener(this, false);
     }
     void place(const std::string& v) {
@@ -109,17 +111,18 @@ public:
     }
     template <class T> T* as() { return dynamic_cast<T*>(content.get()); }
     void resized() override {
-        auto r = getLocalBounds(); auto t = r.removeFromTop(CTL() + 6); if (floating) { closeB.setVisible(true); closeB.setBounds(t.removeFromRight(32).reduced(3)); }
+        auto r = getLocalBounds(); auto t = r.removeFromTop(CTL() + 6);
+        if (floating) { closeB.setVisible(true); closeB.setBounds(t.removeFromRight(32).reduced(3)); minB.setVisible(true); minB.setButtonText(minimized ? u8("▢") : u8("—")); minB.setBounds(t.removeFromLeft(32).reduced(3)); t.removeFromRight(10); }
         // narrow decks: tabs shrink to icons (the active one keeps its label), the row scrolls sideways
         const bool iconsOnly = getWidth() < 900 && !isTouch(), iconsAll = getWidth() < 560 && !isTouch();
         int x = 4; for (int i = 0; i < tabs.size(); i++) { auto* b = tabs[i]; b->showLabel = !iconsOnly || (b->on() && !iconsAll); const int w = b->idealWidth(); b->setBounds(x, 0, w, t.getHeight() - 8); x += w + 2; }
         tabRow.setSize(std::max(x + 4, t.getWidth()), t.getHeight() - 8); tabView.setBounds(t.reduced(0, 4)); showActiveTab();
-        tabBar = t; if (content) content->setBounds(r);
+        tabBar = t; if (content) { content->setVisible(!minimized); content->setBounds(r); }
     }
     void paint(juce::Graphics& g) override {
         auto r = getLocalBounds().toFloat(); juce::Path clip; clip.addRoundedRectangle(r, RAD()); g.saveState(); g.reduceClipRegion(clip);
         const float al = style().bgOn ? 0.78f : 1.f; g.setColour(BG2.withAlpha(al)); g.fillRect(r); g.setColour(TABBG.withAlpha(al)); g.fillRect(tabBar.toFloat()); g.restoreState();
-        if (floating) { g.setColour(DIM); for (int i = 0; i < 3; i++) g.drawLine((float)getWidth() - 4 - i * 4, (float)getHeight() - 2, (float)getWidth() - 2, (float)getHeight() - 4 - i * 4, 1); }
+        if (floating && !minimized) { g.setColour(DIM); for (int i = 0; i < 3; i++) g.drawLine((float)getWidth() - 4 - i * 4, (float)getHeight() - 2, (float)getWidth() - 2, (float)getHeight() - 4 - i * 4, 1); }
     }
     void paintOverChildren(juce::Graphics& g) override { g.setColour(floating ? ACCENT : LINE); g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), RAD(), 1); }
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override {   // the wheel scrolls the tab row sideways
@@ -134,7 +137,7 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override { if (sizing && onResize) { auto p = e.getEventRelativeTo(this).getPosition(); onResize(std::max(340, p.x + 4), std::max(220, p.y + 4)); return; } if (dragFrom && onDrag) onDrag(e.getScreenPosition() + *dragFrom); }
     void mouseMove(const juce::MouseEvent& e) override { setMouseCursor(floating && e.eventComponent == this && e.x > getWidth() - 18 && e.y > getHeight() - 18 ? juce::MouseCursor::BottomRightCornerResizeCursor : juce::MouseCursor::NormalCursor); }
 private:
-    juce::OwnedArray<Btn> tabs; juce::Viewport tabView; juce::Component tabRow; std::unique_ptr<juce::Component> content; juce::Rectangle<int> tabBar; Btn closeB{ u8("✕"), Btn::Tb };
+    juce::OwnedArray<Btn> tabs; juce::Viewport tabView; juce::Component tabRow; std::unique_ptr<juce::Component> content; juce::Rectangle<int> tabBar; Btn closeB{ u8("✕"), Btn::Tb }, minB{ u8("—"), Btn::Tb };
     std::optional<juce::Point<int>> dragFrom;
 };
 
@@ -264,6 +267,7 @@ public:
         buildTopBar();
         for (auto& id : { "A", "B", "C", "D", "F" }) { auto* d = decks.add(new Deck(id)); d->make = [this](const std::string& v) { return makeView(v); }; d->onTab = [this](Deck& dk, const std::string& v) { show(dk, v); }; addChildComponent(d); }
         auto* F = decks[4]; F->floating = true; F->onClose = [this] { props->setValue("float", false); layoutDecks(); };
+        F->minimized = props->getBoolValue("floatMin", false); F->onMinimize = [this, F] { F->minimized = !F->minimized; props->setValue("floatMin", F->minimized); layoutDecks(); F->resized(); };
         F->onResize = [this](int w, int h) { props->setValue("floatW", w); props->setValue("floatH", h); layoutDecks(); };
         F->onDrag = [this, F](juce::Point<int> screen) { auto p = getLocalPoint(nullptr, screen); props->setValue("floatX", juce::jlimit(0, getWidth() - 120, p.x)); props->setValue("floatY", juce::jlimit(0, getHeight() - 60, p.y)); F->setTopLeftPosition(props->getIntValue("floatX"), props->getIntValue("floatY")); };
         addAndMakeVisible(splitter); splitter.o = this;
@@ -597,7 +601,10 @@ private:
         void mouseDrag(const juce::MouseEvent& e) override { auto p = o->getLocalPoint(this, e.getPosition()); auto r = o->decksArea; const double v = side ? (p.x - r.getX()) / (double)r.getWidth() : (p.y - r.getY()) / (double)r.getHeight(); o->props->setValue("split", juce::jlimit(0.15, 0.85, v)); o->layoutDecks(); }
     } splitter;
     juce::Rectangle<int> decksArea; Keys keysC; Toast toastC;
-    std::vector<Deck*> active() { if (narrow) return { decks[0] }; const auto l = props->getValue("layout", "stack"); const int n = l == "single" ? 1 : l == "tri" ? 3 : l == "quad" ? 4 : 2;
+    // the workspace layout: what the user chose in Settings, on any screen (a phone cast to a TV or docked to a monitor
+    // can use several decks); until they choose, one deck on a narrow screen and two elsewhere
+    juce::String layoutPref() const { return props->containsKey("layout") ? props->getValue("layout") : juce::String(narrow ? "single" : "stack"); }
+    std::vector<Deck*> active() { const auto l = layoutPref(); const int n = l == "single" ? 1 : l == "tri" ? 3 : l == "quad" ? 4 : 2;
         std::vector<Deck*> v; for (int i = 0; i < n; i++) v.push_back(decks[i]); if (props->getBoolValue("float", false)) v.push_back(decks[4]); return v; }
     std::string freeView() { auto act = active(); for (auto& v : views()) { bool used = false; for (auto* d : act) used |= d->cur == v.id; if (!used) return v.id; } return "rack"; }
     void place(Deck& d, const std::string& v) { d.place(v); props->setValue("deck" + juce::String(d.id), juce::String(v)); afterPlace(d); }
@@ -621,7 +628,7 @@ private:
         const bool showKeys = props->getBoolValue("keys", false); keysC.setVisible(showKeys);
         if (showKeys) { if (keysC.floating) { const int w = props->getIntValue("keysW", 760), h = props->getIntValue("keysFH", 170); keysC.setBounds(juce::jlimit(0, std::max(0, getWidth() - 200), props->getIntValue("keysX", 120)), juce::jlimit(0, std::max(0, getHeight() - 80), props->getIntValue("keysY", 140)), std::min(w, getWidth()), h); keysC.toFront(false); }
             else { const int h = juce::jlimit(60, getHeight() / 2, props->getIntValue("keysH", isTouch() ? 104 : 118)); keysC.setBounds(r.removeFromBottom(h)); r.removeFromBottom(6); } }
-        decksArea = r; const auto l = narrow ? juce::String("single") : props->getValue("layout", "stack"); const double split = props->getDoubleValue("split", 0.45);
+        decksArea = r; const auto l = layoutPref(); const double split = props->getDoubleValue("split", 0.45);
         splitter.setVisible(l == "stack" || l == "side"); splitter.side = l == "side";
         if (l == "single") decks[0]->setBounds(r);
         else if (l == "stack") { const int h = (int)((r.getHeight() - 8) * split); decks[0]->setBounds(r.removeFromTop(h)); splitter.setBounds(r.removeFromTop(8)); decks[1]->setBounds(r); }
@@ -629,7 +636,9 @@ private:
         else { auto top = r.removeFromTop((r.getHeight() - 6) / 2); r.removeFromTop(6);
             if (l == "tri") { decks[0]->setBounds(top); decks[1]->setBounds(r.removeFromLeft((r.getWidth() - 6) / 2)); r.removeFromLeft(6); decks[2]->setBounds(r); }
             else { decks[0]->setBounds(top.removeFromLeft((top.getWidth() - 6) / 2)); top.removeFromLeft(6); decks[1]->setBounds(top); decks[2]->setBounds(r.removeFromLeft((r.getWidth() - 6) / 2)); r.removeFromLeft(6); decks[3]->setBounds(r); } }
-        if (props->getBoolValue("float", false) && !narrow) { auto* F = decks[4]; F->setBounds(juce::jlimit(0, std::max(0, getWidth() - 340), props->getIntValue("floatX", 140)), juce::jlimit(0, std::max(0, getHeight() - 220), props->getIntValue("floatY", 110)), props->getIntValue("floatW", 620), props->getIntValue("floatH", 400)); F->toFront(false); }
+        if (props->getBoolValue("float", false)) {   // on any screen; kept inside the window (a small screen gets a smaller panel)
+            auto* F = decks[4]; const int fw = std::min(props->getIntValue("floatW", 620), std::max(240, getWidth() - 8)), fh = F->minimized ? CTL() + 8 : std::min(props->getIntValue("floatH", 400), std::max(180, getHeight() - topBottom - 8));
+            F->setBounds(juce::jlimit(0, std::max(0, getWidth() - fw), props->getIntValue("floatX", 140)), juce::jlimit(topBottom, std::max(topBottom, getHeight() - fh), props->getIntValue("floatY", 110)), fw, fh); F->toFront(false); }
         toastC.toFront(false);
     }
     std::unique_ptr<juce::Component> makeView(const std::string& v) {
@@ -970,6 +979,7 @@ public:
             else if (a == "--record-audio") { m->armAudioRecording(); recTest = true; }
             else if (a == "--quit-after" && i + 1 < args.size()) quitAfter = args[++i].getDoubleValue();
             else if (a == "--snapshot" && i + 1 < args.size()) snap = juce::File::getCurrentWorkingDirectory().getChildFile(args[++i].unquoted());
+            else if (a == "--settings-tab" && i + 1 < args.size()) ui::SettingsView::startTab() = args[++i].unquoted();   // e.g. audio (snapshots, tests)
             else if (a == "--size" && i + 1 < args.size()) { auto s = args[++i]; win->setSize(s.upToFirstOccurrenceOf("x", false, false).getIntValue(), s.fromFirstOccurrenceOf("x", false, false).getIntValue()); }
             else if (a == "--channel" && i + 1 < args.size()) { const auto nm = args[++i].unquoted().toStdString(); for (auto& c : m->document().p.channels) if (c.name == nm) m->document().selectChannel(c.id); }
             else if (a == "--export" && i + 1 < args.size()) { auto f = juce::File::getCurrentWorkingDirectory().getChildFile(args[++i].unquoted()); try { m->exportTo(f, true, f.getFileExtension().substring(1).toLowerCase().toStdString()); std::cout << "exported " << f.getFullPathName() << " (" << f.getSize() / 1024 << " KB)\n"; } catch (const std::exception& e) { std::cout << "export failed: " << e.what() << "\n"; } }

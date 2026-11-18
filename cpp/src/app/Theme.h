@@ -446,7 +446,7 @@ inline std::function<void(Menu&, const std::string& link, double v, std::functio
 inline std::map<std::string, std::vector<juce::Component::SafePointer<juce::Component>>>& linkedKnobs() { static std::map<std::string, std::vector<juce::Component::SafePointer<juce::Component>>> m; return m; }
 inline double& knobClip() { static double v = std::numeric_limits<double>::quiet_NaN(); return v; }
 
-class Knob : public juce::Component, private juce::Timer {
+class Knob : public juce::Component, public LongPressTarget, private juce::Timer {
 public:
     enum Size { Normal, Sm, Xs };
     juce::Slider s{ juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
@@ -484,10 +484,13 @@ public:
         g.setColour(showing ? ACCENT2 : DIM); g.setFont(font(FS * (size == Xs ? 0.68f : 0.78f)));
         g.drawFittedText(showing ? fmt(s.getValue()) : caption, getLocalBounds().removeFromBottom(capH()), juce::Justification::centredTop, 1, 0.85f);
     }
-    void mouseDown(const juce::MouseEvent& e) override { if (e.mods.isPopupMenu() || touchMenu()) { menu(); } }
+    void mouseDown(const juce::MouseEvent& e) override { pressValue = s.getValue(); if (e.mods.isPopupMenu() || touchMenu()) { menu(); } }
     void mouseUp(const juce::MouseEvent& e) override { if (!e.mouseWasDraggedSinceMouseDown() && !e.mods.isPopupMenu()) showVal(); }
+    // a long press on a touch screen (Touch.h): the finger may have nudged the dial while it was held, so put the value
+    // back where the press began, then show the menu (Reset, Type in value, copy / paste, automation and MIDI)
+    void longPress() override { if (s.getValue() != pressValue) setV(pressValue); menu(); }
 private:
-    juce::String caption; double def; bool showing = false;
+    juce::String caption; double def, pressValue = 0; bool showing = false;
     int capH() const { return juce::roundToInt(FS * (size == Xs ? 0.68f : 0.78f) * 1.3f) + 3; }
     void showVal() { showing = true; repaint(); startTimer(900); }
     void timerCallback() override { stopTimer(); showing = false; repaint(); }
@@ -523,22 +526,36 @@ struct Flow {
     int layout(juce::Rectangle<int> r, bool apply = true, bool wrap = true) const {
         const int c = CTL(), pad = PAD(), x0 = r.getX() + 8, maxX = r.getRight() - 8;
         int rightW = 0, rightH = c; for (auto& i : items) if (i.right) { rightW += i.w + gap; rightH = std::max(rightH, i.h < 0 ? c : i.h); }
+        // the right-aligned group shares the first line only if it leaves room for the first left item; otherwise
+        // (narrow screens) it gets its own line(s) at the end, still right-aligned, so nothing is drawn over anything
+        int firstLeft = 0; for (auto& i : items) if (!i.right && !i.brk && i.c) { firstLeft = i.w; break; }
+        const bool rightShares = !wrap || rightW == 0 || maxX - x0 - rightW >= firstLeft;
         // split into lines
         std::vector<std::vector<const It*>> lines(1); int x = x0;
         for (auto& i : items) {
             if (i.right) continue;
             if (i.brk) { lines.emplace_back(); x = x0; continue; }
-            const int limit = maxX - (lines.size() == 1 ? rightW : 0);
+            const int limit = maxX - (lines.size() == 1 && rightShares ? rightW : 0);
             if (wrap && x + i.w > limit && x > x0) { lines.emplace_back(); x = x0; }
             lines.back().push_back(&i); x += i.w + gap;
         }
+        auto placeRight = [&](int y, int lh) {   // right to left from maxX; wraps to further lines if still too wide
+            int rx = maxX, yy = y, used = lh;
+            for (auto it = items.rbegin(); it != items.rend(); ++it) if (it->right) {
+                const int h = it->h < 0 ? c : it->h;
+                if (wrap && rx - it->w < x0 && rx < maxX) { rx = maxX; yy += used + pad; used = h; }
+                rx -= it->w; if (it->c && apply) it->c->setBounds(rx, yy + (lh - h) / 2, it->w, h); rx -= gap;
+            }
+            return yy - y + used;   // height used by the right group
+        };
         int y = r.getY() + pad;
         for (size_t li = 0; li < lines.size(); li++) {
-            int lh = li == 0 ? rightH : c; for (auto* i : lines[li]) lh = std::max(lh, i->h < 0 ? c : i->h);
+            int lh = li == 0 && rightShares ? rightH : c; for (auto* i : lines[li]) lh = std::max(lh, i->h < 0 ? c : i->h);
             int xx = x0; for (auto* i : lines[li]) { const int h = i->h < 0 ? c : i->h; if (i->c && apply) i->c->setBounds(xx, y + (lh - h) / 2, i->w, h); xx += i->w + gap; }
-            if (li == 0) { int rx = maxX; for (auto it = items.rbegin(); it != items.rend(); ++it) if (it->right) { const int h = it->h < 0 ? c : it->h; rx -= it->w; if (it->c && apply) it->c->setBounds(rx, y + (lh - h) / 2, it->w, h); rx -= gap; } }
+            if (li == 0 && rightShares) placeRight(y, lh);
             y += lh + (li + 1 < lines.size() ? pad : 0);
         }
+        if (!rightShares) { y += pad; y += placeRight(y, rightH); }
         return y + pad - r.getY();
     }
 };

@@ -11,7 +11,7 @@
 
 namespace ui {
 
-class DesignView : public juce::Component, private juce::Timer {
+class DesignView : public juce::Component, private juce::Timer, private juce::ChangeListener {
 public:
     explicit DesignView(Doc& d) : doc(d) {
         addAndMakeVisible(cv); D = us::designPresets()[0].second; name = us::designPresets()[0].first;
@@ -19,12 +19,14 @@ public:
         cv.makeBar = [this](Flow& f) { f.add(startL, startL.idealWidth()).add(startBox, 190).add(playB, playB.idealWidth()).add(autoChk, 130).right(selB, selB.idealWidth()).right(rackB, rackB.idealWidth()).right(saveB, saveB.idealWidth()).right(info, std::max(60, info.idealWidth())); };
         playB.primary = true; playB.onClick = [this] { play(); };
         autoChk.setButtonText("Play on change"); autoChk.setToggleState(true, juce::dontSendNotification); autoChk.onClick = [this] { autoPlay = autoChk.getToggleState(); };
-        saveB.setTooltip("Keep this sound as a sample"); rackB.setTooltip("Save and add as a new channel"); selB.setTooltip("Save and use for the selected sampler channel");
+        saveB.setTooltip("Keep this sound as a sample"); rackB.setTooltip("Save and add as a new channel"); selB.setTooltip("Save this sound and put it on the channel selected in the Rack (it replaces that channel's sample)");
         saveB.onClick = [this] { save(0); }; rackB.onClick = [this] { save(1); }; selB.onClick = [this] { save(2); };
         startBox.onChange = [this] { const int i = startBox.getSelectedItemIndex(); if (i > 0 && i - 1 < (int)startIds.size()) { const auto id = startIds[(size_t)i - 1]; startBox.setSelectedItemIndex(0, juce::dontSendNotification); start(id); } };
         cv.top = &wave; cv.topH = 118; cv.addAndMakeVisible(wave); wave.col = ACCENT;
         build(); render(false);
+        doc.addChangeListener(this); refreshSel();
     }
+    ~DesignView() override { doc.removeChangeListener(this); }
     void resized() override { cv.setBounds(getLocalBounds()); }
 
 private:
@@ -34,6 +36,14 @@ private:
     static juce::String pct(double v) { return juce::String(juce::roundToInt(v * 100)) + "%"; }
     static juce::String secs(double v) { return v < 1 ? juce::String(juce::roundToInt(v * 1000)) + "ms" : juce::String(v, 2) + "s"; }
     static juce::String hz(double v) { return v >= 1000 ? juce::String(v / 1000, 1) + "k" : juce::String(juce::roundToInt(v)) + "Hz"; }
+    // the "use on a channel" button names its target: the sampler channel selected in the Rack (or says there is none)
+    void refreshSel() {
+        auto* c = doc.chan(); const bool ok = c && c->type == "sample";
+        const juce::String t = ok ? u8("→ ") + juce::String(c->name).substring(0, 14) : juce::String(u8("→ Channel"));
+        selB.setEnabled(ok); selB.setTooltip(ok ? "Save this sound and put it on the \"" + juce::String(c->name) + "\" channel (it replaces that channel's sample)" : juce::String("Select a sampler channel in the Rack to put this sound on it"));
+        if (selB.getButtonText() != t) { selB.setButtonText(t); cv.resized(); }
+    }
+    void changeListenerCallback(juce::ChangeBroadcaster*) override { refreshSel(); }
     void changed() { startTimer(160); }   // re-render a moment after the last change
     void timerCallback() override { stopTimer(); render(true); }
     std::function<void()> none() { return [] {}; }

@@ -86,7 +86,7 @@ private:
     }
 
     Doc& doc; AppCtx& app; juce::String tab = "theme"; juce::OwnedArray<Tab> tabBtns; juce::StringArray ids; juce::Viewport view; Page page;
-    juce::OwnedArray<juce::Component> owned; std::unique_ptr<juce::AudioDeviceSelectorComponent> devSel; std::unique_ptr<juce::FileChooser> chooser;
+    juce::OwnedArray<juce::Component> owned; std::unique_ptr<juce::FileChooser> chooser;
     struct CardX { juce::String title; std::vector<RowR> rows; juce::Rectangle<int> area; };
     std::vector<CardX> cards;
     juce::PropertiesFile& P() { return *app.props; }
@@ -117,7 +117,7 @@ private:
 
     void build() {
         for (int i = 0; i < tabBtns.size(); i++) tabBtns[i]->setToggleState(ids[i] == tab, juce::dontSendNotification);
-        cards.clear(); page.removeAllChildren(); owned.clear(); devSel.reset();
+        cards.clear(); page.removeAllChildren(); owned.clear();
         if (tab == "theme") theme(); else if (tab == "general") general(); else if (tab == "audio") audio(); else if (tab == "midi") midi(); else if (tab == "hotkeys") hotkeys(); else if (tab == "file") file(); else if (tab == "plugins") plugins(); else project();
         page.o = this; layout(); page.repaint();
     }
@@ -165,9 +165,10 @@ private:
     struct AccentPick : juce::ColourSelector { std::function<void(juce::Colour)> fn; AccentPick() : juce::ColourSelector(showColourspace | showSliders) { setSize(300, 280); } ~AccentPick() override { if (fn) fn(getCurrentColour()); } };
     void pickAccent() { auto cs = std::make_unique<AccentPick>(); cs->setCurrentColour(ACCENT); cs->fn = [this, sp = juce::Component::SafePointer<SettingsView>(this)](juce::Colour c) { juce::MessageManager::callAsync([sp, c] { if (sp) { sp->up("accent", juce::String(toHex(c))); sp->build(); } }); };
         juce::CallOutBox::launchAsynchronously(std::move(cs), getScreenBounds().withSizeKeepingCentre(10, 10), nullptr); }
+    static bool narrowScreen() { if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()) return d->userArea.getWidth() < 760; return false; }   // the app's own default for phones
     void general() {
         sec("Layout");
-        row("Workspace", sel({ { "single", "One deck" }, { "stack", "Two decks, stacked" }, { "side", "Two decks, side by side" }, { "tri", "Three decks (one wide, two below)" }, { "quad", "Four decks (2 x 2)" } }, P().getValue("layout", "stack"), [this](auto v) { up("layout", v); }), "Any view can live in any deck. Phones always use one deck.", 210);
+        row("Workspace", sel({ { "single", "One deck" }, { "stack", "Two decks, stacked" }, { "side", "Two decks, side by side" }, { "tri", "Three decks (one wide, two below)" }, { "quad", "Four decks (2 x 2)" } }, P().getValue("layout", narrowScreen() ? "single" : "stack"), [this](auto v) { up("layout", v); }), "Any view can live in any deck. Phones always use one deck.", 210);
         row("Floating deck", check("float", false), "An extra deck in a panel you can drag by its tab bar", 30);
         row("On-screen keyboard", check("keys", false), {}, 30);
         sec("Editing");
@@ -178,19 +179,81 @@ private:
     }
     void audio() {
         sec("Input / output");
-        if (app.devices) { devSel = std::make_unique<juce::AudioDeviceSelectorComponent>(*app.devices, 0, 8, 2, 2, false, false, true, false); page.addAndMakeVisible(*devSel); row({}, devSel.get(), {}, 1000, 300); }
-        note("Speakers, headphones, an audio interface, or a JACK / PipeWire device. Recording inputs are chosen per bus in the Mixer (IN).");
+        if (auto* dm = app.devices) deviceRows(*dm); else note("No audio device manager.");
+        note("Speakers, headphones or an audio interface. Recording inputs are chosen per bus in the Mixer (IN).");
         auto* st = small(statusText()); st->setJustificationType(juce::Justification::centredLeft); st->setFont(mono(FS * 0.8f, false)); row("Status", st, {}, 300);
         sec("Quality");
         row("Bit depth", sel({ { "16", "16-bit (CD quality, smallest files)" }, { "24", "24-bit (studio standard)" }, { "32", "32-bit float (highest, largest files)" } }, P().getValue("bitDepth", "24"), [this](auto v) { up("bitDepth", v.getIntValue(), false); }), "Used for WAV export", 200);
         row("Export sample rate", sel({ { "44100", "44.1 kHz" }, { "48000", "48 kHz" }, { "88200", "88.2 kHz" }, { "96000", "96 kHz" } }, P().getValue("exportRate", "48000"), [this](auto v) { up("exportRate", v.getIntValue(), false); }), "Rate of exported files. Recording uses the device rate shown under Status.");
-        row("MP3 bitrate", sel({ { "128", "128 kbps" }, { "192", "192 kbps" }, { "256", "256 kbps" }, { "320", "320 kbps (highest)" } }, P().getValue("mp3Kbps", "320"), [this](auto v) { up("mp3Kbps", v.getIntValue(), false); }), us::mp3Available() ? "MP3 encoding uses LAME (libmp3lame, LGPL)" : "Needs LAME: sudo apt install libmp3lame0");
+        row("MP3 bitrate", sel({ { "128", "128 kbps" }, { "192", "192 kbps" }, { "256", "256 kbps" }, { "320", "320 kbps (highest)" } }, P().getValue("mp3Kbps", "320"), [this](auto v) { up("mp3Kbps", v.getIntValue(), false); }), us::mp3Available() ? "MP3 encoding uses LAME (libmp3lame, LGPL)" : 
+           #if JUCE_WINDOWS
+            "Needs libmp3lame.dll next to Undae Sonicae.exe"
+           #elif JUCE_ANDROID
+            "MP3 export is not available on Android yet"
+           #else
+            "Needs LAME: sudo apt install libmp3lame0"
+           #endif
+            );
         note("WAV is uncompressed, so it has no bitrate: quality is set by bit depth and sample rate. 24-bit / 48 kHz is about 2,304 kbps in stereo. FLAC is lossless and about half the size; Ogg Vorbis is lossy (quality 8).");
-        sec("Drivers"); note("Undae Sonicae uses the Linux audio system: PipeWire, ALSA or JACK. For the lowest latency, run PipeWire or JACK with a small buffer (quantum) and choose its device above. Class-compliant USB audio interfaces work without extra drivers.");
+        sec("Drivers"); note(
+           #if JUCE_WINDOWS
+            "On Windows, Undae Sonicae uses Windows Audio (WASAPI) or DirectSound. For the lowest delay choose Windows Audio (Exclusive Mode) or (Low Latency Mode) above with a small buffer; exclusive mode keeps other apps from sharing the device while it plays."
+           #elif JUCE_ANDROID
+            "On Android, Undae Sonicae uses the system's low-latency audio where the device has it. Wired or USB headphones and interfaces have far less delay than Bluetooth, which adds its own buffering."
+           #elif JUCE_MAC
+            "On macOS, Undae Sonicae uses Core Audio. Class-compliant USB interfaces work without extra drivers."
+           #else
+            "Undae Sonicae uses the Linux audio system: PipeWire, ALSA or JACK. For the lowest latency, run PipeWire or JACK with a small buffer (quantum) and choose its device above. Class-compliant USB audio interfaces work without extra drivers."
+           #endif
+            );
         sec("CPU");
         row("Multi-threaded processing", check("threads", true, [](bool) { toast("Takes effect when you restart Undae Sonicae"); }), "On: plug-ins process in parallel, each in its own host thread. Off: plug-ins take turns on one thread, which uses less CPU. Applies after a restart.", 30);
         row("Meter refresh", sel({ { "0", "Off" }, { "15", "15 fps" }, { "30", "30 fps" }, { "60", "60 fps" } }, P().getValue("meterFps", "30"), [this](auto v) { up("meterFps", v.getIntValue(), false); }));
         note("If you hear crackles, raise the audio buffer size above. Plug-ins run in their own processes and answer each audio block directly, so they add no buffering of their own.");
+    }
+    // The audio device in the app's own rows (driver, output, input, sample rate, buffer, test tone), so it fits narrow
+    // screens and matches the rest of Settings. Changes go through the device manager, which saves them; the page is
+    // rebuilt afterwards (asynchronously: never from inside the combo box that is reporting the change).
+    void rebuildSoon() { juce::MessageManager::callAsync([sp = juce::Component::SafePointer<SettingsView>(this)] { if (sp) sp->build(); }); }
+    void applySetup(juce::AudioDeviceManager& dm, const juce::AudioDeviceManager::AudioDeviceSetup& st) { const auto err = dm.setAudioDeviceSetup(st, true); if (err.isNotEmpty()) toast(err); rebuildSoon(); }
+    void deviceRows(juce::AudioDeviceManager& dm) {
+        using Opts = std::vector<std::pair<juce::String, juce::String>>;
+        auto& types = dm.getAvailableDeviceTypes();
+        if (types.size() > 1) { Opts o; for (auto* t : types) o.push_back({ t->getTypeName(), t->getTypeName() });
+            row("Driver", sel(o, dm.getCurrentAudioDeviceType(), [this, &dm](const juce::String& v) { dm.setCurrentAudioDeviceType(v, true); rebuildSoon(); }), driverHint(), 260); }
+        auto* type = dm.getCurrentDeviceTypeObject(); auto st = dm.getAudioDeviceSetup();
+        if (type) {
+            Opts outs; for (auto& n : type->getDeviceNames(false)) outs.push_back({ n, n });
+            if (!outs.empty()) row("Output", sel(outs, st.outputDeviceName, [this, &dm](const juce::String& v) { auto s2 = dm.getAudioDeviceSetup(); s2.outputDeviceName = v; applySetup(dm, s2); }), {}, 260);
+            if (type->hasSeparateInputsAndOutputs()) { Opts ins{ { "", "(no input)" } }; for (auto& n : type->getDeviceNames(true)) ins.push_back({ n, n });
+                row("Input", sel(ins, st.inputDeviceName, [this, &dm](const juce::String& v) { auto s2 = dm.getAudioDeviceSetup(); s2.inputDeviceName = v; s2.useDefaultInputChannels = true; applySetup(dm, s2); }), "For recording: a microphone, line input or interface", 260); }
+        }
+        if (auto* d = dm.getCurrentAudioDevice()) {
+            Opts rates; for (double r : d->getAvailableSampleRates()) rates.push_back({ juce::String((int)r), juce::String((int)r) + " Hz" });
+            if (!rates.empty()) row("Sample rate", sel(rates, juce::String((int)d->getCurrentSampleRate()), [this, &dm](const juce::String& v) { auto s2 = dm.getAudioDeviceSetup(); s2.sampleRate = v.getDoubleValue(); applySetup(dm, s2); }), {}, 260);
+            Opts sizes; const double sr = d->getCurrentSampleRate() > 0 ? d->getCurrentSampleRate() : 48000;
+            for (int b : d->getAvailableBufferSizes()) sizes.push_back({ juce::String(b), juce::String(b) + " samples (" + juce::String(b * 1000.0 / sr, 1) + " ms)" });
+            if (!sizes.empty()) row("Buffer size", sel(sizes, juce::String(d->getCurrentBufferSizeSamples()), [this, &dm](const juce::String& v) { auto s2 = dm.getAudioDeviceSetup(); s2.bufferSize = v.getIntValue(); applySetup(dm, s2); }),
+                                    "Smaller: less delay between playing and hearing. Larger: fewer crackles.", 260);
+            const auto inNames = d->getInputChannelNames();
+            if (!inNames.isEmpty()) {
+                auto* t = own(new juce::ToggleButton()); t->setToggleState(!d->getActiveInputChannels().isZero(), juce::dontSendNotification);
+                t->onClick = [this, t, &dm, n = inNames.size()] { auto s2 = dm.getAudioDeviceSetup(); s2.useDefaultInputChannels = false; s2.inputChannels.clear(); if (t->getToggleState()) s2.inputChannels.setRange(0, n, true); applySetup(dm, s2); };
+                row("Use the input", t, juce::String(inNames.size()) + (inNames.size() == 1 ? " channel: " : " channels: ") + inNames.joinIntoString(", "), 30);
+            }
+            row("Test", btn("Play a test tone", [&dm] { dm.playTestSound(); }), "A short beep through the output", 160);
+        }
+    }
+    static juce::String driverHint() {
+       #if JUCE_WINDOWS
+        return "Exclusive or Low Latency mode: the least delay";
+       #elif JUCE_ANDROID
+        return "Android's own audio; the low-latency one is used when the device supports it";
+       #elif JUCE_MAC
+        return "Core Audio";
+       #else
+        return "ALSA, or JACK / PipeWire for the lowest delay";
+       #endif
     }
     juce::String statusText() {
         auto* d = app.devices ? app.devices->getCurrentAudioDevice() : nullptr; if (!d) return "No audio device open";
