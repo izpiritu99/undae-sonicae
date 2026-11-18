@@ -1061,7 +1061,8 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    there without them. Still to do, if wanted: port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
    `autopan`, `lofi`, `pitchshift`, `doubler`, `autofilter`, `amp`, `subgen`, `dyneq`, `irverb`). The synth's "wt:" wave names and the five wavetable presets also need porting to
-   `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp", "slice" / "slices" to the Electron engine. Until then, do not open projects that use them in the Electron app.
+   `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp", "slice" / "slices" to the Electron engine. Until then the Electron app ignores them (the project opens, but saving it from there may
+   drop those settings: not checked).
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).
