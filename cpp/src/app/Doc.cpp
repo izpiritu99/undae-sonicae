@@ -32,6 +32,12 @@ const std::vector<FxSpec>& fxSpecs() {
         { "fdn", "Vault reverb", { { "mode", "Space", 0, 0, 0, false, { "hall", "room", "plate", "gated" } }, { "decay", "Decay", 0.2, 20, 2.5, true, {} },
             { "size", "Size", 0.3, 2, 1, false, {} }, { "damp", "Damp Hz", 1000, 20000, 6000, true, {} }, { "pre", "Pre-delay", 0, 200, 15, false, {} },
             { "mod", "Motion", 0, 1, 0.3, false, {} }, { "width", "Width", 0, 1, 1, false, {} }, { "mix", "Mix", 0, 1, 0.25, false, {} } } },
+        { "gate", "Gate", { { "src", "Key from", 0, 0, 0, false, { "@buses" } }, { "thr", "Open at", -80, 0, -40, false, {} }, { "hyst", "Close below", 0, 20, 4, false, {} },
+            { "att", "Attack", 0.0001, 0.05, 0.001, true, {} }, { "hold", "Hold", 0, 0.5, 0.05, false, {} }, { "rel", "Release", 0.01, 2, 0.15, true, {} },
+            { "range", "Range", 0, 80, 80, false, {} }, { "hpf", "Detect from Hz", 20, 2000, 20, true, {} } } },
+        { "trans", "Transients", { { "attack", "Attack", -100, 100, 0, false, {} }, { "sustain", "Sustain", -100, 100, 0, false, {} }, { "out", "Output", -18, 18, 0, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "imager", "Stereo width", { { "width", "Width %", 0, 200, 100, false, {} }, { "bass", "Bass", 0, 0, 0, false, { "off", "mono" } }, { "mono", "Mono below Hz", 40, 500, 120, true, {} },
+            { "haas", "Widen ms", 0, 30, 0, false, {} }, { "bal", "Balance", -1, 1, 0, false, {} } } },
     };
     return v;
 }

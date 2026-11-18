@@ -865,3 +865,13 @@ The first four from the list are built-in effects now. Each is in `Effects.cpp` 
 Not done yet: these effects are not in the Electron edition (see the caution above: opening such a project there fails
 until `fx.js` gets them or a pass-through); no response-curve or gain-reduction display yet; not tried by ear in the app
 window. Next in the order: gate (3), transient shaper (5), stereo imager (6), then the tempo-aware delay and glitch.
+
+Second batch (2026-11-17, Windows), self-test 30 / 30:
+- **Gate** (`gate`, item 3): open / close thresholds (hysteresis), attack, hold, release, range (80 dB = shut, less = an
+  expander), detector high-pass, optional "Key from" bus through the side-chain path (the engine's graph key includes
+  it, as for the peak controller). Check: a quiet passage is shut 66 dB, a loud key bus holds a quiet signal open.
+- **Transients** (`trans`, item 5): attack and sustain -100..+100 %, output, mix. Check: attack +100 % lifts the start
+  of a hit, sustain -100 % lowers its tail about 10 dB.
+- **Stereo width** (`imager`, item 6): width 0-200 %, bass mono below a frequency (LR4 high-pass on the side), Haas
+  widening, balance. Check: the 60 Hz side drops 32 dB with bass mono at 150 Hz, 2 kHz untouched; width 0 % is mono.
+Next in the order: the tempo-aware delay (8) and glitch / stutter (9), then the vocoder (10).

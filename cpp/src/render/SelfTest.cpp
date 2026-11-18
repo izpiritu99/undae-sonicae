@@ -174,6 +174,34 @@ int main(int argc, char** argv) {
         for (const char* md : { "tube", "tape", "transformer", "clip", "exciter" }) { auto f = ui::newFx("sat"); f.p.set("mode", juce::String(md)); f.p.set("drive", 30.0); f.p.set("bias", 1.0); measure(f, md); }
         for (const char* md : { "hall", "room", "plate", "gated" }) { auto f = ui::newFx("fdn"); f.p.set("mode", juce::String(md)); f.p.set("decay", 20.0); f.p.set("size", 2.0); f.p.set("damp", 20000.0); f.p.set("mod", 1.0); f.p.set("mix", 1.0); measure(f, md); }
         check(ok && worst < 4, "saturator and Vault reverb modes at full settings stay finite and bounded (peaks: " + peaks + "input peak 0.9)");
+
+        // second batch: gate, transient shaper, stereo width
+        auto runSt = [&](const us::FxSlot& f, std::vector<float> L, std::vector<float> R, const std::vector<float>* key = nullptr) {
+            auto e = us::makeEffect(f.type); e->prepare(sr, 512); e->set(f);
+            for (int o = 0; o < N; o += 512) { const int b = std::min(512, N - o); if (key) e->side(key->data() + o, key->data() + o, b); e->process(L.data() + o, R.data() + o, b); }
+            return std::make_pair(L, R);
+        };
+        auto win = [&](const std::vector<float>& v, double a, double b) { double s = 0; size_t c = 0; for (size_t i = (size_t)(a * sr); i < (size_t)(b * sr); i++, c++) s += (double)v[i] * v[i]; return 10 * std::log10(s / std::max<size_t>(1, c) + 1e-30); };
+        std::vector<float> sig((size_t)N); for (int i = 0; i < N; i++) sig[(size_t)i] = (float)((i < N / 2 ? 0.5 : 0.001) * std::sin(2 * 3.14159265358979 * 440 * i / sr));
+        auto gt = ui::newFx("gate");
+        auto go = runSt(gt, sig, sig).first;
+        const double openD = win(go, 0.1, 0.5) - win(sig, 0.1, 0.5), shutD = win(go, 0.8, 1.0) - win(sig, 0.8, 1.0);
+        auto gk = gt; gk.p.set("src", juce::String("kick")); std::vector<float> quiet = sine(440, 0.001), keyLoud = sine(60, 0.5);
+        const double keyD = win(runSt(gk, quiet, quiet, &keyLoud).first, 0.2, 1.0) - win(quiet, 0.2, 1.0);
+        check(std::abs(openD) < 0.5 && shutD < -40 && std::abs(keyD) < 1, "gate: open part changes " + std::to_string(openD) + " dB, quiet part shut " + std::to_string(shutD) + " dB, a loud key bus holds a quiet signal open (" + std::to_string(keyD) + " dB)");
+
+        std::vector<float> hits((size_t)N, 0.f); for (int i = 0; i < N; i++) { const double t = std::fmod((double)i / sr, 0.25); hits[(size_t)i] = (float)(0.5 * std::exp(-t / 0.08) * std::sin(2 * 3.14159265358979 * 200 * t)); }
+        auto ta = ui::newFx("trans"); ta.p.set("attack", 100.0); auto ts = ui::newFx("trans"); ts.p.set("sustain", -100.0);
+        auto at = runSt(ta, hits, hits).first, su = runSt(ts, hits, hits).first;
+        const double hitUp = win(at, 0.5, 0.505) - win(hits, 0.5, 0.505), tailDown = win(su, 0.58, 0.7) - win(hits, 0.58, 0.7);
+        check(hitUp > 3 && tailDown < -3, "transient shaper: attack +100 % lifts the first 5 ms of a hit " + std::to_string(hitUp) + " dB, sustain -100 % lowers its tail " + std::to_string(tailDown) + " dB");
+
+        std::vector<float> sL((size_t)N), sR((size_t)N); for (int i = 0; i < N; i++) { const double w = 0.5 * std::sin(2 * 3.14159265358979 * 60 * i / sr) + 0.5 * std::sin(2 * 3.14159265358979 * 2000 * i / sr); sL[(size_t)i] = (float)w; sR[(size_t)i] = (float)-w; }   // all side
+        auto im = ui::newFx("imager"); im.p.set("bass", juce::String("mono")); im.p.set("mono", 150.0);
+        auto bm = runSt(im, sL, sR); std::vector<float> side((size_t)N); for (int i = 0; i < N; i++) side[(size_t)i] = 0.5f * (bm.first[(size_t)i] - bm.second[(size_t)i]);
+        const double lowD = 20 * std::log10(tone(side, 60) / 0.5 + 1e-12), highD = 20 * std::log10(tone(side, 2000) / 0.5 + 1e-12);
+        auto im0 = ui::newFx("imager"); im0.p.set("width", 0.0); auto mo = runSt(im0, sL, sR); float diff0 = 0; for (int i = 0; i < N; i++) diff0 = std::max(diff0, std::abs(mo.first[(size_t)i] - mo.second[(size_t)i]));
+        check(lowD < -20 && std::abs(highD) < 1 && diff0 < 1e-6f, "stereo width: bass mono below 150 Hz takes the 60 Hz side down " + std::to_string(-lowD) + " dB, 2 kHz side changes " + std::to_string(highD) + " dB; width 0 % is mono");
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

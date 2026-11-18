@@ -467,6 +467,83 @@ public:
     }
 };
 
+// Gate / expander: the detector (peak follower on a high-passed copy of this bus, or of the key bus when one is chosen)
+// opens the gate above `thr` and lets it close only below `thr - hyst`, after `hold`. Closed means `range` dB down
+// (80 = shut, less = an expander). The gain moves in dB with the attack / release times.
+class Gate : public Effect {
+    std::string src; double thr = -40, hyst = 4, att = 0.001, hold = 0.05, rel = 0.15, range = 80, hpf = -1;
+    Biquad hpS, hpK; double env = 0, gdb = -80, holdLeft = 0; bool open = false, haveKey = false; std::vector<float> key;
+    double detect(Biquad& hp, double x) { const double h = std::abs(hp.tick(x)); const double a = std::exp(-1 / (0.0002 * sr)), r = std::exp(-1 / (0.01 * sr)); env = h > env ? a * env + (1 - a) * h : r * env + (1 - r) * h; return env; }
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); key.assign((size_t)std::max(b, 4096), 0.f); hpf = -1; }
+    void set(const FxSlot& f) override {
+        src = f.str("src", ""); thr = f.num("thr", -40); hyst = f.num("hyst", 4); att = f.num("att", 0.001); hold = f.num("hold", 0.05); rel = f.num("rel", 0.15); range = f.num("range", 80);
+        const double h = f.num("hpf", 20); if (h != hpf) { hpf = h; for (Biquad* q : { &hpS, &hpK }) { q->type = FilterType::Highpass; q->set(sr, hpf, Q_BW2, 0); } }
+    }
+    std::string sideSource() const override { return src; }
+    void side(const float* L, const float* R, int n) override { for (int i = 0; i < n; i++) key[(size_t)i] = 0.5f * (L[i] + R[i]); haveKey = true; }
+    void process(float* L, float* R, int n) override {
+        const bool k = haveKey && !src.empty(); haveKey = false;
+        const double ca = std::exp(-1 / (std::max(1e-4, att) * sr)), cr = std::exp(-1 / (std::max(1e-3, rel) * sr));
+        const double openLin = dbToGain(thr), closeLin = dbToGain(thr - hyst);
+        for (int i = 0; i < n; i++) {
+            const double e = k ? detect(hpK, key[(size_t)i]) : detect(hpS, 0.5 * (L[i] + R[i]));
+            if (e > openLin) { open = true; holdLeft = hold * sr; }
+            else if (open && e < closeLin) { if (holdLeft > 0) holdLeft--; else open = false; }
+            else if (open) holdLeft = hold * sr;
+            const double tgt = open ? 0.0 : -range;
+            gdb = tgt > gdb ? ca * gdb + (1 - ca) * tgt : cr * gdb + (1 - cr) * tgt;
+            const float g = (float)dbToGain(gdb); L[i] *= g; R[i] *= g;
+        }
+    }
+};
+
+// Transient shaper: two pairs of envelope followers on the louder side. Attack: a fast-attack follower against a
+// slow-attack one, their difference in dB is how far into a hit we are. Sustain: a slow-release follower against a
+// fast-release one, the difference is how far into a tail. Gain (dB) = attack% x first + sustain% x second, +-24 dB.
+class Transient : public Effect {
+    double aAmt = 0, sAmt = 0, out = 1, fA = 0, sA = 0, fR = 0, sR = 0; WetDry m;
+    static double fol(double& e, double x, double a, double r) { e = x > e ? a * e + (1 - a) * x : r * e + (1 - r) * x; return e; }
+public:
+    void set(const FxSlot& f) override { aAmt = f.num("attack", 0) / 100; sAmt = f.num("sustain", 0) / 100; out = dbToGain(f.num("out", 0)); m.mix(f.num("mix", 1)); }
+    void process(float* L, float* R, int n) override {
+        auto k = [&](double t) { return std::exp(-1 / (t * sr)); };
+        const double a1 = k(0.0005), a20 = k(0.02), r20 = k(0.02), r60 = k(0.06), r400 = k(0.4);
+        for (int i = 0; i < n; i++) {
+            const double x = std::max(std::abs(L[i]), std::abs(R[i])) + 1e-9;
+            const double d1 = 20 * std::log10(fol(fA, x, a1, r60) / (fol(sA, x, a20, r60) + 1e-9) + 1e-9);
+            const double d2 = 20 * std::log10(fol(sR, x, a1, r400) / (fol(fR, x, a1, r20) + 1e-9) + 1e-9);
+            const double gdb = clampd(aAmt * std::max(0.0, d1) + sAmt * std::max(0.0, d2), -24, 24);
+            const double g = dbToGain(gdb) * out;
+            L[i] = (float)(L[i] * (m.dry + g * m.wet)); R[i] = (float)(R[i] * (m.dry + g * m.wet));
+        }
+    }
+};
+
+// Stereo imager: mid / side width (0 % mono, 200 % double side), the side's low end removed below `mono` Hz (4th-order
+// Linkwitz-Riley high-pass on the side only, so bass is mono), a Haas delay on the right for widening mono sources,
+// and balance.
+class Imager : public Effect {
+    double width = 1, mono = -1, haas = 0, bal = 0; bool bassMono = false; Biquad s1, s2; DelayLine hd;
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); hd.init((size_t)(0.04 * s) + 4); mono = -1; }
+    void set(const FxSlot& f) override {
+        width = f.num("width", 100) / 100; haas = f.num("haas", 0); bal = f.num("bal", 0); bassMono = f.str("bass", "off") == "mono";
+        const double mf = f.num("mono", 120); if (mf != mono) { mono = mf; for (Biquad* q : { &s1, &s2 }) { q->type = FilterType::Highpass; q->set(sr, mono, Q_BW2, 0); } }
+    }
+    void process(float* L, float* R, int n) override {
+        const double hs = haas * 0.001 * sr; const double gl = bal > 0 ? 1 - bal : 1, gr = bal < 0 ? 1 + bal : 1;
+        for (int i = 0; i < n; i++) {
+            const double mid = 0.5 * (L[i] + R[i]); double side = 0.5 * (L[i] - R[i]);
+            if (bassMono) side = s2.tick(s1.tick(side));
+            side *= width;
+            double l = mid + side, r = mid - side;
+            hd.push((float)r); if (hs >= 1) r = hd.read(hs);
+            L[i] = (float)(l * gl); R[i] = (float)(r * gr);
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -491,6 +568,9 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "deess") return std::make_unique<DeEsser>();
     if (t == "sat") return std::make_unique<Saturator>();
     if (t == "fdn") return std::make_unique<FdnReverb>();
+    if (t == "gate") return std::make_unique<Gate>();
+    if (t == "trans") return std::make_unique<Transient>();
+    if (t == "imager") return std::make_unique<Imager>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 
