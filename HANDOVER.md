@@ -984,6 +984,10 @@ modal models, arpeggiator / step sequencer, original preset banks).
   over 1-4 octaves, gate length, and a 1-16 step on / off pattern for rhythm. Card "Arpeggiator" at the bottom of every
   instrument panel. Check, rendered through the engine: a held C major chord at 120 BPM plays C E G C on the 1/16 grid,
   silent between notes at gate 50 %, and a switched-off step rests.
+- **Synth preset bank** (self-test 45 / 45): 15 more original patches named for what they do (Brass Section, Poly
+  Strings, Square Lead, Chip Lead, Electric Piano, Wobble Bass, Stab Chord, Warm Bass, Hollow Pad, Saw Stack, Breathy
+  Flute, Sweep Pad, Arp Pluck, Deep Sine Bass, Choir Swell): 42 synth presets in all. The wavetable "Glass Keys" was
+  renamed "Crystal Keys" (the name was taken). Check: names unique and every preset sounds, finite and not clipping.
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -999,7 +1003,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (44 after the arpeggiator; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (45 after the preset bank; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.

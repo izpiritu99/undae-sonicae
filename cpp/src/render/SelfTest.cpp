@@ -1,6 +1,7 @@
 // undae-selftest <project.undae.json>: the editing path without a window. Live edits while playing, structural edits
 // (graph swap), undo / redo, save and reload (unknown fields kept, identical render). Prints PASS / FAIL per check.
 #include <iostream>
+#include <set>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "app/Doc.h"
 #include "engine/Analysis.h"
@@ -428,6 +429,18 @@ int main(int argc, char** argv) {
             double on1 = 0, off2 = 0; for (double h : { 261.63, 329.63, 392.0 }) { on1 += toneW(rest, h, 0.01, 0.055); off2 += toneW(rest, h, 0.135, 0.18); }
             check(order && between < 0.01 && on1 > 0.02 && off2 < on1 * 0.02, "arpeggiator: a held C major chord plays " + got + " on the 1/16 grid at 120 BPM, silent between notes at gate 50 %; a switched-off step rests ("
                   + std::to_string(20 * std::log10(std::max(1e-9, off2) / on1)) + " dB)");
+        }
+        // the whole synth preset bank: unique names, and every patch sounds (audible, finite, not clipping hard)
+        {
+            std::set<std::string> names; bool unique = true, allOk = true; std::string bad; int count = 0;
+            for (auto& [name, fn] : ui::synthPresets()) {
+                unique &= names.insert(name).second; count++;
+                us::SynthP x = ui::defSynth(); fn(x); us::NoteOpts o; auto v = us::makeSynthVoice(x, 60, 0.9, 0, 0.6, o, sr); std::vector<float> L((size_t)N, 0.f), R((size_t)N, 0.f);
+                for (int off = 0; off < N; off += 512) v->render(L.data() + off, R.data() + off, nullptr, std::min(512, N - off), off / sr, sr);
+                float pk = 0; bool fin = true; for (int i = 0; i < N; i++) { fin &= std::isfinite(L[(size_t)i]) && std::isfinite(R[(size_t)i]); pk = std::max({ pk, std::abs(L[(size_t)i]), std::abs(R[(size_t)i]) }); }
+                if (!fin || pk < 0.003f || pk > 2.5f) { allOk = false; bad += std::string(name) + " (" + std::to_string(pk) + ") "; }
+            }
+            check(unique && allOk && count >= 40, "synth presets: " + std::to_string(count) + " patches, names unique, every one sounds" + (bad.empty() ? "" : ": not " + bad));
         }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";

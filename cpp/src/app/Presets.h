@@ -34,7 +34,7 @@ inline const std::vector<std::pair<const char*, std::function<void(us::SynthP&)>
             s.menv = { 0.002, 0.45, 0.15, 0.3 }; mod(s, 0, "menv", "morph", 0.75); mod(s, 1, "lfo1", "pitch", 0.006); } },
         { "Fold Bass", [=](S& s) { s.osc[0].wave = "wt:fold"; s.osc[0].morph = 0.05; s.mode = "mono"; s.sub = 0.5; s.f1.cutoff = 3000; s.aenv = { 0.003, 0.3, 0.7, 0.15 };
             s.menv = { 0.001, 0.25, 0.1, 0.2 }; mod(s, 0, "menv", "morph", 0.5); mod(s, 1, "vel", "morph", 0.3); } },
-        { "Glass Keys", [=](S& s) { s.osc[0].wave = "wt:glass"; s.osc[0].morph = 0.6; s.osc[1] = osc(true, "sine", 1, 0, 3, 0.25); s.f1.cutoff = 9000; s.aenv = { 0.003, 1.2, 0.2, 0.8 };
+        { "Crystal Keys", [=](S& s) { s.osc[0].wave = "wt:glass"; s.osc[0].morph = 0.6; s.osc[1] = osc(true, "sine", 1, 0, 3, 0.25); s.f1.cutoff = 9000; s.aenv = { 0.003, 1.2, 0.2, 0.8 };
             s.menv = { 0.001, 0.9, 0, 0.5 }; mod(s, 0, "menv", "morph", -0.4); } },
         { "PWM Strings", [=](S& s) { s.osc[0].wave = "wt:pulse"; s.osc[0].morph = 0.4; s.uni = 4; s.detune = 16; s.spread = 0.9; s.f1.cutoff = 3500; s.aenv = { 0.4, 0.5, 0.85, 0.9 };
             s.lfo[0].rate = 0.6; mod(s, 0, "lfo1", "morph", 0.3); } },
@@ -46,6 +46,22 @@ inline const std::vector<std::pair<const char*, std::function<void(us::SynthP&)>
         { "Glass Mallet", [=](S& s) { s.osc[0].on = false; s.pm = { "mallet", "glass", 2.2, 0.75, 0.2, 0.7, 0.85 }; s.f1.cutoff = 15000; s.aenv = { 0.002, 2.5, 1, 1.2 }; } },
         { "Wood Block", [=](S& s) { s.osc[0].on = false; s.pm = { "mallet", "wood", 1, 0.6, 0.2, 0.85, 1 }; s.f1.cutoff = 12000; s.aenv = { 0.001, 0.5, 1, 0.2 }; } },
         { "Tower Bell", [=](S& s) { s.osc[0].on = false; s.pm = { "mallet", "bell", 6, 0.7, 0.2, 0.75, 0.8 }; s.f1.cutoff = 16000; s.aenv = { 0.002, 6, 1, 3 }; } },
+        // a general bank (original patches, named for what they do)
+        { "Brass Section", [=](S& s) { s.osc[1] = osc(true, "sawtooth", 0, 0, 7, 0.6); s.uni = 2; s.detune = 8; s.f1.cutoff = 900; s.f1.q = 1.2; s.f1.env = 30; s.fenv = { 0.06, 0.4, 0.5, 0.3 }; s.aenv = { 0.05, 0.3, 0.85, 0.25 }; mod(s, 0, "vel", "cutoff", 0.3); } },
+        { "Poly Strings", [=](S& s) { s.uni = 4; s.detune = 12; s.spread = 0.9; s.f1.cutoff = 3200; s.f1.q = 0.8; s.f2.on = true; s.f2.type = "highpass"; s.f2.cutoff = 180; s.aenv = { 0.35, 0.5, 0.9, 0.9 }; s.lfo[0].rate = 4.8; s.lfo[0].fade = 0.8; mod(s, 0, "lfo1", "pitch", 0.004); } },
+        { "Square Lead", [=](S& s) { s.osc[0].wave = "square"; s.osc[1] = osc(true, "square", 1, 0, 6, 0.3); s.mode = "mono"; s.glide = 0.03; s.f1.cutoff = 3800; s.f1.q = 2; s.aenv = { 0.004, 0.2, 0.8, 0.15 }; s.lfo[0].rate = 5.6; s.lfo[0].fade = 0.5; mod(s, 0, "lfo1", "pitch", 0.007); } },
+        { "Chip Lead", [=](S& s) { s.osc[0].wave = "pulse25"; s.f1.on = false; s.aenv = { 0.001, 0.1, 0.85, 0.05 }; s.lfo[0] = { "square", 12, 0, 0 }; mod(s, 0, "lfo1", "pitch", 0.01); } },
+        { "Electric Piano", [=](S& s) { s.osc[0].wave = "sine"; s.osc[1] = osc(false, "sine", 0, 0, 2, 0.5); s.fm = 0.18; s.f1.on = false; s.aenv = { 0.002, 1.8, 0.15, 0.5 }; s.menv = { 0.001, 0.35, 0.05, 0.3 }; mod(s, 0, "menv", "fm", 0.35); mod(s, 1, "vel", "fm", 0.2); s.lfo[0].rate = 4.5; mod(s, 2, "lfo1", "pan", 0.25); } },
+        { "Wobble Bass", [=](S& s) { s.osc[1] = osc(true, "square", -1, 0, 0, 0.6); s.mode = "mono"; s.sub = 0.4; s.f1.type = "lowpass24"; s.f1.cutoff = 300; s.f1.q = 3; s.f1.drive = 0.3; s.aenv = { 0.005, 0.3, 0.9, 0.1 }; s.lfo[0] = { "sine", 2, 0.5, 0 }; mod(s, 0, "lfo1", "cutoff", 0.6); } },
+        { "Stab Chord", [=](S& s) { s.uni = 3; s.detune = 10; s.osc[1] = osc(true, "sawtooth", 0, 7, 0, 0.5); s.f1.cutoff = 700; s.f1.q = 2; s.f1.env = 40; s.fenv = { 0.002, 0.18, 0, 0.12 }; s.aenv = { 0.002, 0.25, 0, 0.15 }; } },
+        { "Warm Bass", [=](S& s) { s.osc[0].wave = "triangle"; s.osc[1] = osc(true, "sawtooth", 0, 0, 3, 0.35); s.mode = "mono"; s.glide = 0.02; s.sub = 0.5; s.f1.cutoff = 700; s.f1.q = 1.2; s.f1.env = 10; s.aenv = { 0.004, 0.4, 0.8, 0.12 }; } },
+        { "Hollow Pad", [=](S& s) { s.osc[0].wave = "pulse10"; s.osc[1] = osc(true, "square", -1, 0, -5, 0.4); s.uni = 3; s.detune = 14; s.spread = 0.8; s.f1.cutoff = 2000; s.f2.on = true; s.f2.type = "highpass"; s.f2.cutoff = 350; s.aenv = { 0.8, 1, 0.8, 1.5 }; s.lfo[1].rate = 0.2; mod(s, 0, "lfo2", "cutoff", 0.15); } },
+        { "Saw Stack", [=](S& s) { s.uni = 7; s.detune = 26; s.spread = 1; s.osc[1] = osc(true, "sawtooth", 1, 0, 0, 0.3); s.f1.cutoff = 6500; s.f1.q = 0.9; s.aenv = { 0.01, 0.4, 0.85, 0.4 }; } },
+        { "Breathy Flute", [=](S& s) { s.osc[0].wave = "sine"; s.osc[1] = osc(true, "triangle", 1, 0, 0, 0.15); s.noise = 0.12; s.noiseTone = 0.7; s.f1.cutoff = 4500; s.aenv = { 0.08, 0.3, 0.85, 0.2 }; s.lfo[0].rate = 5; s.lfo[0].fade = 0.6; mod(s, 0, "lfo1", "pitch", 0.005); mod(s, 1, "lfo1", "amp", 0.08); } },
+        { "Sweep Pad", [=](S& s) { s.uni = 4; s.detune = 18; s.spread = 0.9; s.f1.type = "lowpass24"; s.f1.cutoff = 300; s.f1.q = 3.5; s.f1.env = 48; s.fenv = { 3, 3, 0.5, 2 }; s.aenv = { 1.2, 1.5, 0.9, 2 }; } },
+        { "Arp Pluck", [=](S& s) { s.osc[0].wave = "sawtooth"; s.osc[1] = osc(true, "pulse25", 1, 0, 5, 0.3); s.f1.cutoff = 900; s.f1.q = 4; s.f1.env = 38; s.fenv = { 0.001, 0.12, 0, 0.1 }; s.aenv = { 0.001, 0.22, 0, 0.18 }; mod(s, 0, "vel", "cutoff", 0.4); } },
+        { "Deep Sine Bass", [=](S& s) { s.osc[0].wave = "sine"; s.sub = 0.3; s.mode = "mono"; s.glide = 0.03; s.f1.on = false; s.shaperType = "soft"; s.shaperAmt = 0.25; s.aenv = { 0.003, 0.5, 0.9, 0.12 }; } },
+        { "Choir Swell", [=](S& s) { s.osc[0].wave = "vocal"; s.osc[1] = osc(true, "vocal", 0, 0, 9, 0.6); s.uni = 3; s.detune = 12; s.spread = 0.9; s.f1.cutoff = 3000; s.aenv = { 1, 1, 0.9, 1.8 }; s.lfo[0].rate = 4.4; s.lfo[0].fade = 1; mod(s, 0, "lfo1", "pitch", 0.004); } },
     };
     return list;
 }
