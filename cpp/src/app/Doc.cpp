@@ -87,6 +87,70 @@ const std::vector<FxSpec>& fxSpecs() {
 }
 const FxSpec* fxSpec(const std::string& t) { for (auto& s : fxSpecs()) if (t == s.type) return &s; return nullptr; }
 
+const std::vector<FxChain>& fxChains() {
+    using V = juce::var; using S = juce::String;
+    static const std::vector<FxChain> v = {
+        { "Vocal strip", "Low cut, presence, de-esser, compressor, a touch of tape and plate", {
+            { "peq", { { "hps", V(S("12 dB/oct")) }, { "hpf", V(90.0) }, { "p2f", V(3000.0) }, { "p2g", V(2.5) }, { "p2q", V(0.8) }, { "hsf", V(10000.0) }, { "hsg", V(2.0) } } },
+            { "deess", { { "thr", V(-32.0) }, { "range", V(8.0) } } },
+            { "comp", { { "thr", V(-20.0) }, { "ratio", V(3.0) }, { "att", V(0.008) }, { "rel", V(0.12) }, { "gain", V(4.0) } } },
+            { "sat", { { "mode", V(S("tape")) }, { "drive", V(4.0) }, { "mix", V(0.5) } } },
+            { "fdn", { { "mode", V(S("plate")) }, { "decay", V(1.6) }, { "mix", V(0.12) } } } } },
+        { "Drum bus", "Punch, glue and grit for a drum group", {
+            { "trans", { { "attack", V(30.0) }, { "sustain", V(-10.0) } } },
+            { "comp", { { "thr", V(-16.0) }, { "ratio", V(4.0) }, { "att", V(0.02) }, { "rel", V(0.1) }, { "gain", V(3.0) } } },
+            { "sat", { { "mode", V(S("tape")) }, { "drive", V(5.0) }, { "mix", V(0.5) } } },
+            { "peq", { { "lsg", V(2.0) }, { "lsf", V(80.0) }, { "hsg", V(2.0) } } } } },
+        { "Bass", "Clean low end, a sub layer and steady level", {
+            { "peq", { { "hps", V(S("12 dB/oct")) }, { "hpf", V(32.0) }, { "p1f", V(250.0) }, { "p1g", V(-2.0) } } },
+            { "subgen", { { "amount", V(0.3) }, { "freq", V(110.0) } } },
+            { "comp", { { "thr", V(-22.0) }, { "ratio", V(4.0) }, { "att", V(0.01) }, { "rel", V(0.15) }, { "gain", V(4.0) } } },
+            { "sat", { { "mode", V(S("transformer")) }, { "drive", V(6.0) }, { "mix", V(0.6) } } } } },
+        { "Mastering", "Tidy lows, three-band control, mono bass, limiter and meters", {
+            { "peq", { { "hps", V(S("24 dB/oct")) }, { "hpf", V(25.0) }, { "hsf", V(12000.0) }, { "hsg", V(1.0) } } },
+            { "multiband", { { "lthr", V(-18.0) }, { "lratio", V(2.0) }, { "mthr", V(-18.0) }, { "mratio", V(1.6) }, { "hthr", V(-20.0) }, { "hratio", V(2.0) } } },
+            { "imager", { { "bass", V(S("mono")) }, { "mono", V(120.0) }, { "width", V(110.0) } } },
+            { "limiter", { { "in", V(3.0) }, { "ceil", V(-1.0) } } },
+            { "meters", {} } } },
+        { "Lo-fi beat", "Old sampler grit, record crackle and wobble", {
+            { "lofi", { { "rate", V(16000.0) }, { "bits", V(12.0) }, { "crackle", V(0.3) }, { "wow", V(0.3) }, { "noise", V(0.2) }, { "hi", V(8000.0) } } },
+            { "sat", { { "mode", V(S("tape")) }, { "drive", V(6.0) } } },
+            { "comp", { { "thr", V(-18.0) }, { "ratio", V(3.0) } } } } },
+        { "Guitar", "Amp and cabinet, slap echo and a small room", {
+            { "amp", { { "drive", V(0.6) }, { "cab", V(S("small")) }, { "mid", V(2.0) } } },
+            { "echo", { { "sync", V(S("1/8 dotted")) }, { "fb", V(0.3) }, { "mix", V(0.18) } } },
+            { "fdn", { { "mode", V(S("room")) }, { "decay", V(0.9) }, { "mix", V(0.15) } } } } },
+        { "Radio voice", "Narrow band, clipped and squashed", {
+            { "peq", { { "hps", V(S("24 dB/oct")) }, { "hpf", V(500.0) }, { "lps", V(S("24 dB/oct")) }, { "lpf", V(3500.0) }, { "p2f", V(1500.0) }, { "p2g", V(4.0) } } },
+            { "sat", { { "mode", V(S("clip")) }, { "drive", V(12.0) } } },
+            { "comp", { { "thr", V(-25.0) }, { "ratio", V(8.0) }, { "gain", V(6.0) } } } } },
+        { "Wide pad", "Doubled, chorused and set in a big hall", {
+            { "doubler", { { "mix", V(0.4) } } },
+            { "chorus", { { "rate", V(0.4) }, { "depth", V(0.6) }, { "mix", V(0.35) } } },
+            { "fdn", { { "mode", V(S("hall")) }, { "decay", V(4.0) }, { "mix", V(0.35) } } },
+            { "imager", { { "width", V(140.0) } } } } },
+    };
+    return v;
+}
+std::vector<us::FxSlot> chainSlots(const FxChain& c) {
+    std::vector<us::FxSlot> out;
+    for (auto& [type, ps] : c.slots) { auto f = newFx(type); for (auto& [k, val] : ps) f.p.set(juce::Identifier(k), val); out.push_back(std::move(f)); }
+    return out;
+}
+const std::vector<std::pair<const char*, std::vector<std::string>>>& fxCategories() {
+    static const std::vector<std::pair<const char*, std::vector<std::string>>> v = {
+        { "EQ & filter", { "eq", "peq", "dyneq", "filter", "autofilter" } },
+        { "Dynamics", { "comp", "multiband", "limiter", "gate", "deess", "trans", "duck" } },
+        { "Distortion & colour", { "sat", "dist", "amp", "crush", "lofi", "subgen" } },
+        { "Space", { "reverb", "fdn", "delay", "echo" } },
+        { "Modulation", { "chorus", "phaser", "flanger", "ringmod", "fshift", "rotary", "autopan" } },
+        { "Pitch & voice", { "pitchfix", "pitchshift", "doubler", "vocoder" } },
+        { "Stereo & creative", { "imager", "glitch" } },
+        { "Meters", { "meters" } },
+    };
+    return v;
+}
+
 us::FxSlot newFx(const std::string& type) {
     us::FxSlot f; f.id = us::newId(); f.type = type; f.on = true;
     if (auto* s = fxSpec(type)) for (auto& q : s->params) {

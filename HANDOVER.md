@@ -1013,6 +1013,12 @@ pitch shifter, auto-filter (envelope / LFO wah), amp simulator, sub-bass enhance
     50 Hz under a 100 Hz bass.
   - **Dynamic EQ** (`dyneq`): two peaking bands moving with the level in their own band. Check: a loud 1 kHz goes down
     the full 12 dB set, a quiet one and 100 Hz are untouched.
+- **Effect chains and menu categories** (self-test 48 / 48): `fxChains()` / `chainSlots()` in `Doc.cpp`, eight
+  original ready-made strips that add several slots at once (Vocal strip, Drum bus, Bass, Mastering, Lo-fi beat,
+  Guitar, Radio voice, Wide pad), under "Chains" in the Mixer's "+ Add effect" menu. The effects are now grouped into
+  sub-menus by `fxCategories()` (EQ & filter, Dynamics, Distortion & colour, Space, Modulation, Pitch & voice,
+  Stereo & creative, Meters). Check: every chain slot and setting exists in the effect specs, every effect has a
+  category, and each chain processes a mix cleanly.
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -1028,7 +1034,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (47 after the second-round effects; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (48 after the effect chains; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.

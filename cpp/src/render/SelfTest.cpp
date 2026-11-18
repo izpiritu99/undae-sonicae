@@ -472,6 +472,19 @@ int main(int argc, char** argv) {
                   + "; auto-filter opens " + std::to_string(afLoud - afQuiet) + " dB more for a loud tone; amp 3rd harmonic " + std::to_string(h3) + " (10 kHz through the cab " + std::to_string(amp10k)
                   + " dB); sub enhancer adds 50 Hz under 100 Hz (" + std::to_string(sub50) + "); dynamic EQ takes a loud 1 kHz down " + std::to_string(-deLoud) + " dB, leaves it quiet (" + std::to_string(deQuiet) + ") and 100 Hz alone");
         }
+        // effect chains and the Mixer menu: every chain slot and setting exists, every built-in effect sits in a category, chains process a mix cleanly
+        {
+            bool known = true; std::string bad;
+            for (auto& ch : ui::fxChains()) for (auto& [type, ps] : ch.slots) { auto* sp = ui::fxSpec(type); if (!sp) { known = false; bad += type + " "; continue; }
+                for (auto& [k, v] : ps) { bool has = false; for (auto& q : sp->params) has |= std::string(q.k) == k; if (!has) { known = false; bad += type + "." + k + " "; } } }
+            std::set<std::string> inCat; for (auto& [c, ts] : ui::fxCategories()) for (auto& t : ts) inCat.insert(t);
+            bool allCat = true; for (auto& sp : ui::fxSpecs()) if (!inCat.count(sp.type)) { allCat = false; bad += std::string("uncategorised:") + sp.type + " "; }
+            bool clean = true; std::vector<float> mixL((size_t)N), mixR((size_t)N); for (int i = 0; i < N; i++) { mixL[(size_t)i] = (float)(0.3 * std::sin(i * 0.0571) + 0.2 * std::sin(i * 0.31)); mixR[(size_t)i] = (float)(0.3 * std::sin(i * 0.0573) + 0.15 * std::sin(i * 0.47)); }
+            for (auto& ch : ui::fxChains()) { auto L = mixL, R = mixR; for (auto& f : ui::chainSlots(ch)) { auto e = us::makeEffect(f.type); e->prepare(sr, 512); e->set(f); for (int o = 0; o < N; o += 512) e->process(L.data() + o, R.data() + o, std::min(512, N - o)); }
+                float pk = 0; bool fin = true; for (int i = 0; i < N; i++) { fin &= std::isfinite(L[(size_t)i]) && std::isfinite(R[(size_t)i]); pk = std::max({ pk, std::abs(L[(size_t)i]), std::abs(R[(size_t)i]) }); }
+                if (!fin || pk < 0.01f || pk > 4) { clean = false; bad += std::string(ch.name) + "(" + std::to_string(pk) + ") "; } }
+            check(known && allCat && clean, std::to_string(ui::fxChains().size()) + " effect chains: every slot and setting exists, every effect is in a Mixer category, each chain processes a mix cleanly" + (bad.empty() ? "" : ": " + bad));
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

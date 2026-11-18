@@ -3,6 +3,7 @@
 // with level and peak; "+" adds an insert bus (right-click: a send bus). On the right, the selected bus's effect slots.
 // Mixer hotkeys: Ctrl+L links the selected rack channels, F2 renames, S solos, Alt+arrows move, Alt+R renders armed buses.
 #pragma once
+#include <set>
 #include "Doc.h"
 #include "Keys.h"
 #include "MetersPanel.h"
@@ -236,7 +237,15 @@ private:
         MixerView* o = nullptr; Btn addFx{ "+ Add effect" }; juce::OwnedArray<juce::Component> parts; std::vector<juce::Rectangle<int>> cards; juce::String headText; int H = 100;
         FxRack() { addAndMakeVisible(addFx); addFx.primary = true; addFx.sm = true; addFx.onClick = [this] { addMenu(); }; }
         void addMenu() {
-            Menu m; for (auto& s : fxSpecs()) { const std::string t = s.type; m.item(s.name, [this, t] { if (auto* b = o->doc.bus(o->cur)) { b->fx.push_back(newFx(t)); o->doc.commit(); } }); }
+            Menu m; std::set<std::string> listed;
+            for (auto& [cat, types] : fxCategories()) {
+                Menu sm; for (auto& t : types) if (auto* sp = fxSpec(t)) { listed.insert(t); sm.item(sp->name, [this, t] { if (auto* b = o->doc.bus(o->cur)) { b->fx.push_back(newFx(t)); o->doc.commit(); } }); }
+                m.sub(cat, sm);
+            }
+            for (auto& s : fxSpecs()) if (!listed.count(s.type)) { const std::string t = s.type; m.item(s.name, [this, t] { if (auto* b = o->doc.bus(o->cur)) { b->fx.push_back(newFx(t)); o->doc.commit(); } }); }
+            { Menu cm; for (size_t ci = 0; ci < fxChains().size(); ci++) { const auto& ch = fxChains()[ci]; cm.item(juce::String(ch.name) + u8(" — ") + ch.note, [this, ci] { if (auto* b = o->doc.bus(o->cur)) { for (auto& f : chainSlots(fxChains()[ci])) b->fx.push_back(f); o->doc.commit(); } }); }
+              m.sep(); m.sub("Chains (several effects at once)", cm); }
+            m.sep();
             m.item(u8("Plug-in (CLAP / VST)…"), [this] { choosePlugin(&addFx, false, [this](const juce::var& slot) { if (auto* b = o->doc.bus(o->cur)) { us::FxSlot f; f.id = us::newId(); f.type = "plugin"; f.on = true; if (auto* so = slot.getDynamicObject()) f.p = so->getProperties(); b->fx.push_back(f); o->doc.commit(); } }); });
             m.show(at(&addFx));
         }

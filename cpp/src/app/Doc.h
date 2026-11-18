@@ -16,6 +16,11 @@ struct FxSpec { const char* type; const char* name; std::vector<FxParam> params;
 const std::vector<FxSpec>& fxSpecs();
 const FxSpec* fxSpec(const std::string& type);
 us::FxSlot newFx(const std::string& type);
+// Effect chains: ready-made strips (original settings) that add several slots at once, and the Mixer menu categories.
+struct FxChain { const char* name; const char* note; std::vector<std::pair<std::string, std::vector<std::pair<const char*, juce::var>>>> slots; };
+const std::vector<FxChain>& fxChains();
+std::vector<us::FxSlot> chainSlots(const FxChain& c);
+const std::vector<std::pair<const char*, std::vector<std::string>>>& fxCategories();
 us::SynthP defSynth();
 us::Channel newChannel(const us::Project& p, const std::string& type, const std::string& name, const std::string& sample = "inst:keys");
 us::Project blankProject();
