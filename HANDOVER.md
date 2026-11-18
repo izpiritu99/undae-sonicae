@@ -897,6 +897,16 @@ Next in the order: the vocoder (10), the analyser and meters (11), pitch correct
   than it went in (Output makes up for it); real speech spreads over more bands.
 Next: the analyser and meters (11), pitch correction (12), multiband compressor (13).
 
+- **Meters** (`meters`, item 11), self-test 35 / 35: a pass-through slot whose mixer card shows a live spectrum (4096-point
+  FFT, log axis, slow fall), an oscilloscope (zero-crossing trigger, auto zoom) or a tuner (`pitchOf`), plus momentary /
+  short-term / integrated LUFS (BS.1770 K-weighting from the standard's analogue prototypes; gated integration),
+  true peak (4x oversampled, held) and correlation; click the readings to restart. The audio thread publishes into a
+  `MeterTap` found by slot id (`Effect::attach`, live graphs only, so exports do not disturb it); the panel is
+  `app/MetersPanel.h`. Check: a -20 dBFS 1 kHz sine on both channels reads -19.99 LUFS (reference -20), -20.0 dBTP,
+  correlation +1 / -1, and the tuner hears 440 Hz as note 69.01. Seen in the app window: spectrum and scope views of
+  First Light with the readings. Not in Sound Design (nothing to watch there).
+Next: pitch correction (12), multiband compressor (13), modulation extras (14), lo-fi (15), then the instruments.
+
 ## Linux catch-up list (for later; work is Windows-only for now)
 
 The owner is working on Windows only for now (Android work is fine from Windows: the SDK, Android Studio, the emulator
@@ -911,13 +921,13 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (34 after the vocoder; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (35 after the meters; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
 4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
-   `imager`, `echo`, `glitch`, `vocoder`). Until then, do not open projects that use them in the Electron app.
+   `imager`, `echo`, `glitch`, `vocoder`, `meters`). Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).

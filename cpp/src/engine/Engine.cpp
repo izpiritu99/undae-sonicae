@@ -161,7 +161,7 @@ struct Engine::Graph {
                 std::unique_ptr<Effect> e;
                 if (f.type == "plugin") { auto pf = std::make_unique<PluginFx>(); pf->timeout = plugTimeout; if (plugFor) pf->inst = plugFor("fx:" + b.id + ":" + f.id, slotVar(f)); e = std::move(pf); }
                 else e = makeEffect(f.type);
-                e->prepare(sr, block); e->set(f); n->fx.push_back(std::move(e)); n->slots.push_back(f);
+                e->prepare(sr, block); e->set(f); if (!offline) e->attach(f.id); n->fx.push_back(std::move(e)); n->slots.push_back(f);
             }
             byBus[b.id] = n.get(); buses.push_back(std::move(n));
         }

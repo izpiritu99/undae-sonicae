@@ -5,6 +5,7 @@
 #pragma once
 #include "Doc.h"
 #include "Keys.h"
+#include "MetersPanel.h"
 #include "PlugUI.h"
 #include "Theme.h"
 
@@ -319,6 +320,7 @@ inline void MixerView::FxRack::build() {
                     kn->onDone = [this] { o->doc.commit(); };
                 }
             }
+            if (f.type == "meters") { auto* mp = addPart(new MetersPanel(fid, f.str("view", "spectrum"))); mp->getProperties().set("role", "meters"); mp->getProperties().set("slot", (int)i); mp->setTooltip("Click the readings to restart integrated loudness and the peak hold"); }
             if (f.type == "vocoder") { auto* n = addPart(new Cap(u8("Put this on the voice’s bus. Choose the bus with the synth that should sing as the Carrier, or keep the built-in buzz and set its note."), FS * 0.88f)); n->getProperties().set("role", "note"); n->getProperties().set("slot", (int)i); n->setJustificationType(juce::Justification::topLeft); }
             if (f.type == "duck") { auto* n = addPart(new Cap(u8("Put this on the sound that should move out of the way (bass, pad) and choose the bus that triggers it (kick). “One frequency band” ducks only around Band Hz, like linking the peak to an EQ band."), FS * 0.88f)); n->getProperties().set("role", "note"); n->getProperties().set("slot", (int)i); n->setJustificationType(juce::Justification::topLeft); }
         }
@@ -343,6 +345,7 @@ inline void MixerView::FxRack::layout() {
             if (auto* k = dynamic_cast<Knob*>(p)) { w = k->idealWidth(); h = k->idealHeight(); }
             else if (role == "pick") { w = 150; h = 16 + c; }
             else if (role == "note") { w = W - 32; h = 70; }
+            else if (role == "meters") { w = W - 32; h = static_cast<MetersPanel*>(p)->idealHeight(); }
             else if (role == "plug") { auto* pp = static_cast<PlugPanel*>(p); pp->setSize(W - 32, 100); w = W - 32; h = pp->idealHeight(); }
             if (x + w > W - 16 && x > 16) { x = 16; cy += rowH + 6; rowH = 0; }
             p->setBounds(x, cy, w, h); x += w + 6; rowH = std::max(rowH, h);

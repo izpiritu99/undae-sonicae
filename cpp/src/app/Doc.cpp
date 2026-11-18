@@ -49,6 +49,7 @@ const std::vector<FxSpec>& fxSpecs() {
             { "lo", "Low Hz", 60, 400, 100, true, {} }, { "hi", "High Hz", 2000, 12000, 8000, true, {} }, { "q", "Band width", 0.5, 2, 1, false, {} }, { "shift", "Formant", -1, 1, 0, false, {} },
             { "att", "Attack", 0.001, 0.05, 0.004, true, {} }, { "rel", "Release", 0.01, 0.4, 0.04, true, {} }, { "noise", "Hiss", 0, 1, 0.3, false, {} },
             { "out", "Output", -12, 24, 0, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "meters", "Meters", { { "view", "Show", 0, 0, 0, false, { "spectrum", "scope", "tuner" } } } },
     };
     return v;
 }

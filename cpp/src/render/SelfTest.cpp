@@ -249,6 +249,21 @@ int main(int argc, char** argv) {
                   "vocoder: a 1 kHz voice brings out the buzz's 1046 Hz harmonic " + std::to_string(20 * std::log10(near / std::max(1e-12, far))) + " dB over 392 Hz, silence in gives "
                   + std::to_string(silent - loud) + " dB, a side-chained carrier keeps the voice's 3 kHz " + std::to_string(20 * std::log10(keep / std::max(1e-12, drop))) + " dB over 440 Hz (level " + std::to_string(loud) + " dB)");
         }
+        // meters: BS.1770 reference (a 1 kHz sine at -20 dBFS peak on both channels reads -20 LUFS), true peak, correlation, tuner
+        {
+            auto e = us::makeEffect("meters"); e->prepare(sr, 512); e->attach("selftest-meters"); e->set(ui::newFx("meters"));
+            auto tap = us::MeterTap::forSlot("selftest-meters");
+            auto feed = [&](double seconds, bool anti) { std::vector<float> l(512), r(512); const int blocks = (int)(seconds * sr / 512); static int64_t t = 0;
+                for (int b = 0; b < blocks; b++) { for (int i = 0; i < 512; i++, t++) { const float v = (float)(0.1 * std::sin(2 * 3.14159265358979 * 1000 * t / sr)); l[(size_t)i] = v; r[(size_t)i] = anti ? -v : v; } e->process(l.data(), r.data(), 512); } };
+            feed(4, false);
+            const float mom = tap->momentary, sh = tap->shortTerm, in = tap->integrated, tpk = tap->truePeak, c1 = tap->corr;
+            feed(3, true); const float c2 = tap->corr;
+            std::vector<float> lastL, lastR; tap->last(2048, lastL, lastR); bool ringOk = lastL.size() == 2048 && std::abs(lastL.back() + lastR.back()) < 1e-6f && std::abs(lastL.back()) > 0;
+            const double midi = us::pitchOf(sine(440, 0.3), sr);
+            check(std::abs(mom + 20) < 0.2 && std::abs(sh + 20) < 0.2 && std::abs(in + 20) < 0.2 && std::abs(tpk + 20) < 0.2 && c1 > 0.99f && c2 < -0.99f && ringOk && std::abs(midi - 69) < 0.03,
+                  "meters: -20 dBFS 1 kHz reads momentary " + std::to_string(mom) + ", short " + std::to_string(sh) + ", integrated " + std::to_string(in) + " LUFS (-20), true peak "
+                  + std::to_string(tpk) + " dBTP, correlation " + std::to_string(c1) + " / " + std::to_string(c2) + " (opposite phase), tuner hears 440 Hz as note " + std::to_string(midi));
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

@@ -132,7 +132,7 @@ private:
     std::map<std::string, std::vector<us::PluginInstance::Param>> plugParams;   // what each plug-in effect reported (its knobs)
     void addFx() {
         Menu m; m.head("Built-in");
-        for (auto& s : fxSpecs()) { if (std::string(s.type) == "duck") continue; const std::string t = s.type; m.item(s.name, [this, t] { D.fx.push_back(newFx(t)); if (t == "reverb" || t == "fdn" || t == "delay" || t == "echo") D.tail = std::max(D.tail, 2.0); build(); changed(); }); }
+        for (auto& s : fxSpecs()) { if (std::string(s.type) == "duck" || std::string(s.type) == "meters") continue; const std::string t = s.type; m.item(s.name, [this, t] { D.fx.push_back(newFx(t)); if (t == "reverb" || t == "fdn" || t == "delay" || t == "echo") D.tail = std::max(D.tail, 2.0); build(); changed(); }); }
         m.head("Plug-ins");
         m.item(u8("Plug-in effect (CLAP / VST)…"), [this] { choosePlugin(this, false, [this](const juce::var& slot) {
             us::FxSlot f; f.id = us::newId(); f.type = "plugin"; f.on = true; if (auto* o = slot.getDynamicObject()) f.p = o->getProperties(); D.fx.push_back(f); build();

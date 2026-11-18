@@ -1,5 +1,7 @@
 #include "Effects.h"
 #include <complex>
+#include <map>
+#include <mutex>
 #include <juce_dsp/juce_dsp.h>
 
 namespace us {
@@ -32,6 +34,16 @@ void Compressor::process(float* L, float* R, int n) {
         const double g = dbToGain(gs + makeup);
         L[i] = (float)(dl.read((double)look) * g); R[i] = (float)(dr.read((double)look) * g);
     }
+}
+
+// --- meter taps ------------------------------------------------------------------------------------------------------
+void MeterTap::last(int n, std::vector<float>& L, std::vector<float>& R) const {
+    n = std::min(n, RING); L.resize((size_t)n); R.resize((size_t)n); const uint32_t e = w.load(std::memory_order_acquire);
+    for (int i = 0; i < n; i++) { const uint32_t k = (e - (uint32_t)n + (uint32_t)i) % RING; L[(size_t)i] = l[k]; R[(size_t)i] = r[k]; }
+}
+std::shared_ptr<MeterTap> MeterTap::forSlot(const std::string& id) {
+    static std::mutex mu; static std::map<std::string, std::weak_ptr<MeterTap>> taps;
+    std::lock_guard<std::mutex> lk(mu); auto& wp = taps[id]; auto sp = wp.lock(); if (!sp) { sp = std::make_shared<MeterTap>(); wp = sp; } return sp;
 }
 
 namespace {
@@ -690,6 +702,66 @@ public:
     }
 };
 
+// Meters: passes audio through untouched and feeds the slot's MeterTap: the recent samples (the panel draws the spectrum,
+// the scope and the tuner from them), loudness after ITU-R BS.1770 (K-weighting: a +4 dB shelf at 1682 Hz and a
+// high-pass at 38 Hz; 400 ms momentary, 3 s short-term, integrated with the -70 LUFS absolute and -10 LU relative
+// gates over 400 ms blocks every 100 ms), true peak (4x oversampled sample peak, held), and stereo correlation.
+class Meters : public Effect {
+    std::shared_ptr<MeterTap> tap; Biquad2 shelf, hp; std::unique_ptr<juce::dsp::Oversampling<float>> os; juce::AudioBuffer<float> buf;
+    double sub[30] = {}; int subN = 0, subFill = 0, subLen = 4800; double acc = 0; uint32_t seenReset = 0;
+    double hcnt[760] = {}, hpow[760] = {};   // integrated loudness: a histogram of block loudness in 0.1 LU steps from -70 LUFS
+    double tp = 0, lr = 0, ll = 0, rr = 0;
+    static float lufs(double ms) { return ms > 1e-20 ? (float)(-0.691 + 10 * std::log10(ms)) : -200.f; }
+    void resetAll() { std::fill(std::begin(hcnt), std::end(hcnt), 0.0); std::fill(std::begin(hpow), std::end(hpow), 0.0); tp = 0; if (tap) { tap->integrated = -200; tap->truePeak = -200; } }
+    void block() {   // every 100 ms
+        sub[subN % 30] = acc / subLen; subN++; acc = 0;
+        auto avg = [&](int k) { const int m = std::min(k, subN); double t = 0; for (int i = 0; i < m; i++) t += sub[(subN - 1 - i) % 30]; return m ? t / m : 0.0; };
+        const double mom = avg(4); tap->momentary = lufs(mom); tap->shortTerm = lufs(avg(30));
+        if (subN >= 4) { const double L = lufs(mom); if (L > -70) { const int b = std::min(759, (int)((L + 70) * 10)); hcnt[b] += 1; hpow[b] += mom; } }
+        double n = 0, p = 0; for (int b = 0; b < 760; b++) { n += hcnt[b]; p += hpow[b]; }
+        if (n > 0) {
+            const double rel = lufs(p / n) - 10; double n2 = 0, p2 = 0;
+            for (int b = 0; b < 760; b++) if (-70 + b * 0.1 + 0.05 > rel) { n2 += hcnt[b]; p2 += hpow[b]; }
+            tap->integrated = n2 > 0 ? lufs(p2 / n2) : -200.f;
+        }
+    }
+public:
+    void prepare(double s, int b) override {
+        Effect::prepare(s, b); subLen = std::max(1, (int)std::lround(0.1 * s)); subFill = 0; subN = 0; acc = 0;
+        {   // the K-weighting filters at any rate, from BS.1770's analogue prototypes (the bilinear form libebur128 uses)
+            double K = std::tan(PI * 1681.974450955533 / s), Q = 0.7071752369554196, Vh = std::pow(10.0, 3.999843853973347 / 20), Vb = std::pow(Vh, 0.4996667741545416);
+            double a0 = 1 + K / Q + K * K;
+            for (Biquad* q : { &shelf.l, &shelf.r }) { q->b0 = (Vh + Vb * K / Q + K * K) / a0; q->b1 = 2 * (K * K - Vh) / a0; q->b2 = (Vh - Vb * K / Q + K * K) / a0; q->a1 = 2 * (K * K - 1) / a0; q->a2 = (1 - K / Q + K * K) / a0; }
+            K = std::tan(PI * 38.13547087602444 / s); Q = 0.5003270373238773; a0 = 1 + K / Q + K * K;
+            for (Biquad* q : { &hp.l, &hp.r }) { q->b0 = 1; q->b1 = -2; q->b2 = 1; q->a1 = 2 * (K * K - 1) / a0; q->a2 = (1 - K / Q + K * K) / a0; }
+        }
+        os = std::make_unique<juce::dsp::Oversampling<float>>(2, 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
+        os->initProcessing((size_t)std::max(b, 4096)); buf.setSize(2, std::max(b, 4096));
+    }
+    void attach(const std::string& id) override { tap = MeterTap::forSlot(id); tap->rate = sr; seenReset = tap->resetReq; resetAll(); }
+    void set(const FxSlot&) override {}
+    void process(float* L, float* R, int n) override {
+        if (!tap) return;
+        juce::ScopedNoDenormals nd;
+        if (tap->resetReq != seenReset) { seenReset = tap->resetReq; resetAll(); }
+        uint32_t w = tap->w.load(std::memory_order_relaxed);
+        const double c = std::exp(-1 / (0.3 * sr));
+        for (int i = 0; i < n; i++) {
+            tap->l[w % MeterTap::RING] = L[i]; tap->r[w % MeterTap::RING] = R[i]; w++;
+            float a = L[i], b = R[i]; shelf.tick(a, b); hp.tick(a, b); acc += (double)a * a + (double)b * b;
+            if (++subFill >= subLen) { subFill = 0; block(); }
+            lr = c * lr + (1 - c) * L[i] * R[i]; ll = c * ll + (1 - c) * L[i] * L[i]; rr = c * rr + (1 - c) * R[i] * R[i];
+        }
+        tap->w.store(w, std::memory_order_release);
+        tap->corr = ll * rr > 1e-14 ? (float)clampd(lr / std::sqrt(ll * rr), -1, 1) : 0.f;
+        std::copy(L, L + n, buf.getWritePointer(0)); std::copy(R, R + n, buf.getWritePointer(1));
+        juce::dsp::AudioBlock<float> blk(buf.getArrayOfWritePointers(), 2, (size_t)n); auto up = os->processSamplesUp(blk);
+        for (size_t ch = 0; ch < 2; ch++) { const float* u = up.getChannelPointer(ch); for (size_t i = 0; i < up.getNumSamples(); i++) tp = std::max(tp, (double)std::abs(u[i])); }
+        for (int i = 0; i < n; i++) tp = std::max(tp, (double)std::max(std::abs(L[i]), std::abs(R[i])));
+        tap->truePeak = tp > 1e-10 ? (float)(20 * std::log10(tp)) : -200.f;
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -720,6 +792,7 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "echo") return std::make_unique<EchoLine>();
     if (t == "glitch") return std::make_unique<Glitch>();
     if (t == "vocoder") return std::make_unique<Vocoder>();
+    if (t == "meters") return std::make_unique<Meters>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 
