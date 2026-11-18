@@ -1065,7 +1065,14 @@ Second round done.
   Gradle runs with `JAVA_HOME=C:\Program Files\Android\Android Studio\jbr`: `gradlew.bat assembleRelease` (25 min the
   first time). The release APK (arm64-v8a and x86_64, signed with the local debug key) is 37.8 MB, copied to
   `C:\dev\undae-sonicae\builds\undae-sonicae-native-0.3.0-builtins-android.apk`. No warnings from this round's code
-  under clang. Not run yet: this PC has no emulator or system image, and no phone was connected.
+  under clang.
+- **On the owner's phone** (moto g stylus 2025, Android 16, arm64, 8 cores; 2026-11-17, over adb from Windows): the old
+  install was signed with the laptop's debug key, so the owner removed it and the Windows-built APK was installed under
+  the normal package name. It starts, the Mixer's add menu shows the new categories and Chains, the Mastering chain
+  (parametric EQ, multiband, stereo width, limiter, meters) adds and shows its panels, a synth channel with four steps
+  plays. CPU (`top`, whole app, % of one core): about 11 % stopped, 41-45 % playing the synth through the master chain.
+  No crashes. Found: on touch, a sub-menu (the add menu's categories, Chains) does not open on a quick tap, only on a
+  longer press; worth fixing (JUCE opens sub-menus on hover).
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -1093,8 +1100,8 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp", "slice" / "slices" to the Electron engine. Until then the Electron app ignores them (the project opens, but saving it from there may
    drop those settings: not checked).
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
-6. **Android**: built on Windows (see "Android, built on Windows"); still to run on a phone or an emulator and check
-   CPU there.
+6. **Android**: built on Windows and run on the owner's phone (see "On the owner's phone"); fix sub-menus opening on
+   a quick tap.
 7. **Branches**: the laptop's `main` was fast-forwarded to `windows`. Decide whether `main` simply follows `windows`
    from now on, and push the result back to wherever the canonical copy lives.
 8. **Anything else added on Windows**: each later Windows change that touches platform code (`PluginHost.cpp`,
