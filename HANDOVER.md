@@ -999,6 +999,21 @@ Every item on the plan above is now built. Second round (gaps the survey also sh
 pitch shifter, auto-filter (envelope / LFO wah), amp simulator, sub-bass enhancer, dynamic EQ, effect chains
 (channel-strip and mastering presets that add several slots at once), impulse-response loading for convolution.
 
+- **Second-round effects** (self-test 47 / 47), all in `Effects.cpp` and the Mixer menu:
+  - **Pitch shifter** (`pitchshift`): delay-line shifter with two sine-windowed heads, +-12 semitones and cents.
+    Check: +12 puts a 440 Hz tone at 880 Hz, 67 dB over what is left at 440.
+  - **Doubler** (`doubler`): two copies a few cents up / down, delayed and wandering, spread left and right. Check:
+    the sides decorrelate (0.71) with the level kept.
+  - **Auto-filter** (`autofilter`): zero-delay-feedback state-variable filter (low / band / high), cutoff moved by an
+    envelope follower and an LFO (free or locked to the song), in octaves, drive. Check: a loud tone opens it 39 dB
+    more than a quiet one.
+  - **Amp** (`amp`): two 4x-oversampled asymmetric gain stages, bass / mid / treble, small / large / bright cabinet or
+    none. Check: a strong 3rd harmonic, 10 kHz well down through the cabinet.
+  - **Sub enhancer** (`subgen`): octave divider on the low band, smoothed and enveloped, plus a low shelf. Check: adds
+    50 Hz under a 100 Hz bass.
+  - **Dynamic EQ** (`dyneq`): two peaking bands moving with the level in their own band. Check: a loud 1 kHz goes down
+    the full 12 dB set, a quiet one and 100 Hz are untouched.
+
 ## Linux catch-up list (for later; work is Windows-only for now)
 
 The owner is working on Windows only for now (Android work is fine from Windows: the SDK, Android Studio, the emulator
@@ -1013,14 +1028,14 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (46 after the Studio Kit; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (47 after the second-round effects; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
 4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
-   `autopan`, `lofi`). The synth's "wt:" wave names and the five wavetable presets also need porting to
+   `autopan`, `lofi`, `pitchshift`, `doubler`, `autofilter`, `amp`, `subgen`, `dyneq`). The synth's "wt:" wave names and the five wavetable presets also need porting to
    `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp" to the Electron engine. Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there

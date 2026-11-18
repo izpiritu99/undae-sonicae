@@ -71,6 +71,17 @@ const std::vector<FxSpec>& fxSpecs() {
         { "lofi", "Lo-fi", { { "dither", "Dither", 0, 0, 0, false, { "off", "on" } }, { "rate", "Sample rate", 1000, 48000, 12000, true, {} }, { "bits", "Bits", 2, 16, 12, false, {} },
             { "wow", "Wow", 0, 1, 0, false, {} }, { "noise", "Noise", 0, 1, 0, false, {} }, { "crackle", "Crackle", 0, 1, 0, false, {} },
             { "lo", "Low cut", 20, 1000, 60, true, {} }, { "hi", "High cut", 1000, 20000, 9000, true, {} }, { "narrow", "Narrow", 0, 1, 0, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "pitchshift", "Pitch shifter", { { "semi", "Semitones", -12, 12, 0, false, {} }, { "cents", "Cents", -100, 100, 0, false, {} }, { "win", "Window ms", 20, 100, 50, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "doubler", "Doubler", { { "cents", "Detune c", 0, 30, 9, false, {} }, { "delay", "Delay ms", 5, 40, 18, false, {} }, { "wander", "Wander", 0, 1, 0.5, false, {} }, { "width", "Width", 0, 1, 1, false, {} }, { "mix", "Mix", 0, 1, 0.5, false, {} } } },
+        { "autofilter", "Auto-filter", { { "type", "Type", 0, 0, 0, false, { "lowpass", "bandpass", "highpass" } }, { "sync", "LFO", 0, 0, 0, false, { "free", "1/16", "1/8", "1/4", "1/2", "1 bar" } },
+            { "cut", "Cutoff", 40, 8000, 400, true, {} }, { "q", "Reso", 0.5, 20, 4, true, {} }, { "env", "Envelope oct", -4, 4, 2, false, {} }, { "att", "Attack", 0.001, 0.2, 0.005, true, {} },
+            { "rel", "Release", 0.02, 1.5, 0.15, true, {} }, { "lfo", "LFO oct", 0, 4, 0, false, {} }, { "rate", "Free Hz", 0.05, 15, 1, true, {} }, { "drive", "Drive", 0, 1, 0, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "amp", "Amp", { { "cab", "Cabinet", 0, 0, 0, false, { "small", "large", "bright", "none" } }, { "drive", "Drive", 0, 1, 0.5, false, {} }, { "bass", "Bass", -12, 12, 0, false, {} },
+            { "mid", "Mid", -12, 12, 0, false, {} }, { "treble", "Treble", -12, 12, 0, false, {} }, { "out", "Output", -18, 12, 0, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
+        { "subgen", "Sub enhancer", { { "amount", "Sub", 0, 1, 0.5, false, {} }, { "freq", "Below Hz", 60, 250, 120, true, {} }, { "boost", "Low shelf", 0, 12, 0, false, {} } } },
+        { "dyneq", "Dynamic EQ", { { "f1", "Band 1 Hz", 40, 2000, 250, true, {} }, { "q1", "Width 1", 0.3, 8, 1.5, true, {} }, { "t1", "Thresh 1", -60, 0, -30, false, {} }, { "r1", "Range 1", -24, 12, 0, false, {} },
+            { "f2", "Band 2 Hz", 500, 16000, 4000, true, {} }, { "q2", "Width 2", 0.3, 8, 1.5, true, {} }, { "t2", "Thresh 2", -60, 0, -30, false, {} }, { "r2", "Range 2", -24, 12, -6, false, {} },
+            { "att", "Attack", 0.001, 0.1, 0.005, true, {} }, { "rel", "Release", 0.02, 1, 0.12, true, {} } } },
     };
     return v;
 }

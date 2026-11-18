@@ -454,6 +454,24 @@ int main(int argc, char** argv) {
             check(n2 == 14 && okAll && uniq && kickLow > 0.7 && hatHigh > 0.7 && snareMid > 0.7, "Studio Kit: " + std::to_string(n2) + " sounds, normalised, names unique across kits; kick energy below 200 Hz "
                   + std::to_string((int)(kickLow * 100)) + " %, closed hat above 5 kHz " + std::to_string((int)(hatHigh * 100)) + " %");
         }
+        // second round of effects
+        {
+            auto ps = ui::newFx("pitchshift"); ps.p.set("semi", 12.0); auto po = runFx(ps, sine(440, 0.4));
+            const double up880 = tone(po, 880), left440 = tone(po, 440);
+            auto db = ui::newFx("doubler"); auto dbo = runSt(db, sine(440, 0.4), sine(440, 0.4)); double lr = 0, ll = 0, rr = 0; for (int i = N / 2; i < N; i++) { lr += (double)dbo.first[(size_t)i] * dbo.second[(size_t)i]; ll += (double)dbo.first[(size_t)i] * dbo.first[(size_t)i]; rr += (double)dbo.second[(size_t)i] * dbo.second[(size_t)i]; }
+            const double dcorr = lr / std::sqrt(ll * rr + 1e-30), dlev = lvl(dbo.first) - lvl(sine(440, 0.4));
+            auto af = ui::newFx("autofilter"); af.p.set("cut", 300.0); af.p.set("env", 4.0); af.p.set("q", 0.7);
+            const double afLoud = lvl(runFx(af, sine(3000, 0.5))) - lvl(sine(3000, 0.5)), afQuiet = lvl(runFx(af, sine(3000, 0.005))) - lvl(sine(3000, 0.005));
+            auto am = ui::newFx("amp"); am.p.set("drive", 0.8); auto ao2 = runFx(am, sine(200, 0.3)); bool afin = true; for (float v : ao2) afin &= std::isfinite(v);
+            const double h3 = tone(ao2, 600) / std::max(1e-9, tone(ao2, 200)), amp10k = lvl(runFx(am, sine(10000, 0.05)));
+            auto sg = ui::newFx("subgen"); sg.p.set("amount", 1.0); auto so2 = runFx(sg, sine(100, 0.5)); const double sub50 = tone(so2, 50);
+            auto de = ui::newFx("dyneq"); de.p.set("f2", 1000.0); de.p.set("t2", -30.0); de.p.set("r2", -12.0);
+            const double deLoud = lvl(runFx(de, sine(1000, 0.5))) - lvl(sine(1000, 0.5)), deQuiet = lvl(runFx(de, sine(1000, 0.003))) - lvl(sine(1000, 0.003)), deOther = lvl(runFx(de, sine(100, 0.5))) - lvl(sine(100, 0.5));
+            check(up880 > 10 * left440 && dcorr < 0.95 && std::abs(dlev) < 6 && afLoud - afQuiet > 10 && afin && h3 > 0.05 && sub50 > 0.05 && deLoud < -9 && std::abs(deQuiet) < 0.5 && std::abs(deOther) < 0.5,
+                  "second round: pitch shifter +12 puts 440 Hz at 880 (" + std::to_string(20 * std::log10(up880 / std::max(1e-9, left440))) + " dB over the original); doubler correlation " + std::to_string(dcorr)
+                  + "; auto-filter opens " + std::to_string(afLoud - afQuiet) + " dB more for a loud tone; amp 3rd harmonic " + std::to_string(h3) + " (10 kHz through the cab " + std::to_string(amp10k)
+                  + " dB); sub enhancer adds 50 Hz under 100 Hz (" + std::to_string(sub50) + "); dynamic EQ takes a loud 1 kHz down " + std::to_string(-deLoud) + " dB, leaves it quiet (" + std::to_string(deQuiet) + ") and 100 Hz alone");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

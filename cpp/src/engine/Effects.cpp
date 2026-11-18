@@ -1062,6 +1062,195 @@ public:
     }
 };
 
+// --- second round --------------------------------------------------------------------------------------------------
+
+// Delay-line pitch shifter ("rotating head"): two taps sweep through a `win`-long delay at the rate that gives the
+// pitch ratio, each faded in and out with a sine window half a cycle apart, so one is always mid-read when the other wraps.
+struct PShift {
+    DelayLine d; double ph = 0;
+    void init(double sr, double maxWin) { d.init((size_t)(maxWin * sr) + 8); ph = 0; }
+    float tick(float x, double ratio, double win, double sr) {
+        d.push(x); const double W = std::max(64.0, win * sr);
+        ph += (1 - ratio) / W; ph -= std::floor(ph);
+        const double p2 = ph + 0.5 - std::floor(ph + 0.5);
+        const double a = d.read(1 + ph * W), b = d.read(1 + p2 * W);
+        return (float)(a * std::sin(PI * ph) + b * std::sin(PI * p2));
+    }
+};
+
+// Pitch shifter: a fixed shift in semitones and cents, each side with its own head.
+class PitchShift : public Effect {
+    PShift l, r; double ratio = 1, win = 0.05; WetDry m;
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); l.init(s, 0.12); r.init(s, 0.12); r.ph = 0.25; }
+    void set(const FxSlot& f) override { ratio = std::pow(2.0, f.num("semi", 0) / 12 + f.num("cents", 0) / 1200); win = f.num("win", 50) / 1000; m.mix(f.num("mix", 1)); }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        for (int i = 0; i < n; i++) { const float a = l.tick(L[i], ratio, win, sr), b = r.tick(R[i], ratio, win, sr); L[i] = (float)(L[i] * m.dry + a * m.wet); R[i] = (float)(R[i] * m.dry + b * m.wet); }
+    }
+};
+
+// Doubler: two re-sung copies of the (mono) input, one a few cents up and late on the left, one down and later on the
+// right, with a slow wander in their timing, under the dry signal: the double-tracked sound.
+class Doubler : public Effect {
+    PShift a, b; DelayLine da, db; double cents = 9, delay = 18, width = 1, wander = 0.5, ph = 0; WetDry m;
+public:
+    void prepare(double s, int bl) override { Effect::prepare(s, bl); a.init(s, 0.06); b.init(s, 0.06); b.ph = 0.37; da.init((size_t)(0.08 * s) + 8); db.init((size_t)(0.08 * s) + 8); }
+    void set(const FxSlot& f) override { cents = f.num("cents", 9); delay = f.num("delay", 18); width = f.num("width", 1); wander = f.num("wander", 0.5); m.mix(f.num("mix", 0.5)); }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double ru = std::pow(2.0, cents / 1200), rd = 1 / ru;
+        for (int i = 0; i < n; i++) {
+            ph += 0.23 / sr; ph -= std::floor(ph);
+            const float x = 0.5f * (L[i] + R[i]);
+            da.push(a.tick(x, ru, 0.03, sr)); db.push(b.tick(x, rd, 0.03, sr));
+            const double w1 = wander * 0.003 * sr * std::sin(2 * PI * ph), w2 = wander * 0.003 * sr * std::cos(2 * PI * ph * 1.3);
+            const double va = da.read(std::max(2.0, delay * 0.001 * sr + w1)), vb = db.read(std::max(2.0, delay * 1.45 * 0.001 * sr + w2));
+            const double pl = 0.5 + 0.5 * width, pr = 0.5 - 0.5 * width;
+            L[i] = (float)(L[i] * m.dry + (va * pl + vb * pr) * m.wet); R[i] = (float)(R[i] * m.dry + (va * pr + vb * pl) * m.wet);
+        }
+    }
+};
+
+// State-variable filter (the trapezoidal, zero-delay-feedback form Andrew Simper published): stable and smooth while
+// the cutoff moves every sample. mode 0 low, 1 band, 2 high.
+struct Svf {
+    double ic1 = 0, ic2 = 0;
+    double tick(double v0, double g, double k, int mode) {
+        const double a1 = 1 / (1 + g * (g + k)), a2 = g * a1, a3 = g * a2;
+        const double v3 = v0 - ic2, v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;
+        ic1 = 2 * v1 - ic1; ic2 = 2 * v2 - ic2;
+        return mode == 0 ? v2 : mode == 1 ? v1 : v0 - k * v1 - v2;
+    }
+};
+
+// Auto-filter: a resonant state-variable filter whose cutoff follows the input level (the envelope wah) and an LFO
+// (free or locked to the song), each in octaves.
+class AutoFilter : public Effect {
+    Svf l, r; double base = 400, q = 4, envAmt = 2, att = 0.005, rel = 0.15, lfoAmt = 0, hz = 1, env = 0, ph = 0, drive = 0; int mode = 0; std::string sync = "free"; WetDry m;
+public:
+    void set(const FxSlot& f) override {
+        const std::string t = f.str("type", "lowpass"); mode = t == "bandpass" ? 1 : t == "highpass" ? 2 : 0;
+        base = f.num("cut", 400); q = f.num("q", 4); envAmt = f.num("env", 2); att = f.num("att", 0.005); rel = f.num("rel", 0.15);
+        lfoAmt = f.num("lfo", 0); hz = f.num("rate", 1); sync = f.str("sync", "free"); drive = f.num("drive", 0); m.mix(f.num("mix", 1));
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double rate = lfoRate(sync, hz, bpm), ca = std::exp(-1 / (std::max(1e-4, att) * sr)), cr = std::exp(-1 / (std::max(1e-3, rel) * sr)), k = 1 / std::max(0.3, q), dg = 1 + drive * 5;
+        if (beat >= 0 && noteBeats(sync) > 0) { const double cyc = beat / noteBeats(sync); ph = cyc - std::floor(cyc); }
+        double g = 0;
+        for (int i = 0; i < n; i++) {
+            const double x = std::max(std::abs(L[i]), std::abs(R[i])); env = x > env ? ca * env + (1 - ca) * x : cr * env + (1 - cr) * x;
+            if ((i & 7) == 0) {
+                const double oct = envAmt * std::min(1.0, env * 3) + lfoAmt * std::sin(2 * PI * ph);
+                g = std::tan(PI * clampd(base * std::exp2(oct), 20, sr * 0.45) / sr);
+            }
+            ph += rate / sr; ph -= std::floor(ph);
+            double a = L[i], b = R[i]; if (drive > 0) { a = std::tanh(a * dg) / dg * 1.5; b = std::tanh(b * dg) / dg * 1.5; }
+            const double yl = l.tick(a, g, k, mode), yr = r.tick(b, g, k, mode);
+            L[i] = (float)(L[i] * m.dry + yl * m.wet); R[i] = (float)(R[i] * m.dry + yr * m.wet);
+        }
+    }
+};
+
+// Amp simulator: input gain, two oversampled asymmetric gain stages with a bright pre-emphasis between them, a
+// bass / mid / treble tone stack, and a speaker cabinet (band-limiting with a resonance) for small, large or bright
+// boxes, or none (straight to a desk).
+class AmpSim : public Effect {
+    std::unique_ptr<juce::dsp::Oversampling<float>> os; juce::AudioBuffer<float> buf; Biquad2 pre, bass, mid, treb, ch1, ch2, cp, dcb; DelayLine dl, dr; int lat = 0;
+    double drive = 0.5, outG = 1, b0 = -99, m0 = -99, t0 = -99; std::string cab = "-", lastCab; WetDry m;
+    void cabinet() {
+        double hp = 20, lp = 18000, pf = 1000, pg = 0;
+        if (cab == "small") { hp = 140; lp = 3800; pf = 1600; pg = 4; } else if (cab == "large") { hp = 75; lp = 5200; pf = 110; pg = 4; } else if (cab == "bright") { hp = 110; lp = 7000; pf = 2800; pg = 3; }
+        ch1.setType(FilterType::Highpass); ch1.set(sr, hp, Q_BW2, 0); ch2.setType(FilterType::Lowpass); ch2.set(sr, lp, Q_BW2, 0); cp.setType(FilterType::Peaking); cp.set(sr, pf, 1.2, pg);
+    }
+public:
+    void prepare(double s, int b) override {
+        Effect::prepare(s, b);
+        os = std::make_unique<juce::dsp::Oversampling<float>>(2, 2, juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple, true, true);
+        os->initProcessing((size_t)std::max(b, 4096)); lat = (int)std::lround(os->getLatencyInSamples()); buf.setSize(2, std::max(b, 4096)); dl.init((size_t)lat + 8); dr.init((size_t)lat + 8);
+        pre.setType(FilterType::Highshelf); pre.set(s * 4, 1200, 1, 6); dcb.setType(FilterType::Highpass); dcb.set(s, 15, Q_BW2, 0); lastCab = "";
+    }
+    void set(const FxSlot& f) override {
+        drive = f.num("drive", 0.5); outG = dbToGain(f.num("out", 0)); m.mix(f.num("mix", 1)); cab = f.str("cab", "small");
+        const double b = f.num("bass", 0), mi = f.num("mid", 0), t = f.num("treble", 0);
+        if (b != b0 || mi != m0 || t != t0) { b0 = b; m0 = mi; t0 = t; bass.setType(FilterType::Lowshelf); bass.set(sr, 120, 1, b); mid.setType(FilterType::Peaking); mid.set(sr, 700, 0.8, mi); treb.setType(FilterType::Highshelf); treb.set(sr, 3200, 1, t); }
+        if (cab != lastCab) { lastCab = cab; cabinet(); }
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        float* io[2] = { buf.getWritePointer(0), buf.getWritePointer(1) }; std::copy(L, L + n, io[0]); std::copy(R, R + n, io[1]);
+        juce::dsp::AudioBlock<float> blk(io, 2, (size_t)n); auto up = os->processSamplesUp(blk);
+        const double g1 = 1 + drive * drive * 30, g2 = 1 + drive * 4;
+        for (size_t i = 0; i < up.getNumSamples(); i++) {
+            float a = up.getChannelPointer(0)[i], b = up.getChannelPointer(1)[i];
+            a = (float)(std::tanh(a * g1 + 0.15) - std::tanh(0.15)); b = (float)(std::tanh(b * g1 + 0.15) - std::tanh(0.15));
+            pre.tick(a, b);
+            a = (float)(std::tanh(a * g2 - 0.1) + std::tanh(0.1)) * 0.8f; b = (float)(std::tanh(b * g2 - 0.1) + std::tanh(0.1)) * 0.8f;
+            up.getChannelPointer(0)[i] = a; up.getChannelPointer(1)[i] = b;
+        }
+        os->processSamplesDown(blk);
+        for (int i = 0; i < n; i++) {
+            float a = io[0][i], b = io[1][i]; dcb.tick(a, b); bass.tick(a, b); mid.tick(a, b); treb.tick(a, b);
+            if (cab != "none") { ch1.tick(a, b); ch2.tick(a, b); cp.tick(a, b); }
+            dl.push(L[i]); dr.push(R[i]); const float xl = lat ? dl.read(lat) : L[i], xr = lat ? dr.read(lat) : R[i];
+            L[i] = (float)(xl * m.dry + a * outG * 0.5 * m.wet); R[i] = (float)(xr * m.dry + b * outG * 0.5 * m.wet);
+        }
+    }
+};
+
+// Sub enhancer: an octave divider (a flip-flop that changes state on every upward zero crossing of the low band)
+// makes a square an octave below the bass; it is smoothed to a sine-like tone, given the level of the bass
+// itself, and added, together with a low shelf.
+class SubGen : public Effect {
+    Biquad lp1, lp2, sm1, sm2; Biquad2 shelf; double amount = 0.5, freq = -1, boost = -99, env = 0, last = 0; int flip = 1;
+public:
+    void set(const FxSlot& f) override {
+        amount = f.num("amount", 0.5); const double fr = f.num("freq", 120), bo = f.num("boost", 0);
+        if (fr != freq || bo != boost) { freq = fr; boost = bo; for (Biquad* q : { &lp1, &lp2 }) { q->type = FilterType::Lowpass; q->set(sr, freq, Q_BW2, 0); } for (Biquad* q : { &sm1, &sm2 }) { q->type = FilterType::Lowpass; q->set(sr, freq * 0.6, Q_BW2, 0); } shelf.setType(FilterType::Lowshelf); shelf.set(sr, freq, 1, boost); }
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double ca = std::exp(-1 / (0.005 * sr)), cr = std::exp(-1 / (0.1 * sr));
+        for (int i = 0; i < n; i++) {
+            const double lo = lp2.tick(lp1.tick(0.5 * (L[i] + R[i])));
+            if (last <= 0 && lo > 0) flip = -flip;   // one flip per cycle: a square of half the frequency
+            last = lo; const double e = std::abs(lo); env = e > env ? ca * env + (1 - ca) * e : cr * env + (1 - cr) * e;
+            const double sub = sm2.tick(sm1.tick(flip * env * 1.6)) * amount;
+            float a = (float)(L[i] + sub), b = (float)(R[i] + sub); if (boost != 0) shelf.tick(a, b);
+            L[i] = a; R[i] = b;
+        }
+    }
+};
+
+// Dynamic EQ: two peaking bands whose gain moves with the level inside the band (each band has its own band-pass
+// detector): `range` dB at full (12 dB above `thr`), nothing below; a negative range tames a band when it gets loud
+// (harsh vocals, boomy notes), a positive one lifts it.
+class DynEq : public Effect {
+    struct Band { double f = 1000, q = 1, thr = -30, range = -6, env = 0, g = 0; Biquad det; Biquad2 eq; double lf = -1, lq = -1; };
+    Band b[2]; double att = 0.005, rel = 0.12;
+public:
+    void set(const FxSlot& f) override {
+        static const char* K[2][4] = { { "f1", "q1", "t1", "r1" }, { "f2", "q2", "t2", "r2" } };
+        const double df[2] = { 250, 4000 };
+        for (int k = 0; k < 2; k++) { b[k].f = f.num(K[k][0], df[k]); b[k].q = f.num(K[k][1], 1.5); b[k].thr = f.num(K[k][2], -30); b[k].range = f.num(K[k][3], k ? -6 : 0); }
+        att = f.num("att", 0.005); rel = f.num("rel", 0.12);
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double ca = std::exp(-1 / (std::max(1e-4, att) * sr)), cr = std::exp(-1 / (std::max(1e-3, rel) * sr));
+        for (auto& B : b) {
+            if (B.range == 0) continue;
+            if (B.f != B.lf || B.q != B.lq) { B.lf = B.f; B.lq = B.q; B.det.type = FilterType::Bandpass; B.det.set(sr, B.f, B.q, 0); B.eq.setType(FilterType::Peaking); B.g = 1e9; }
+            for (int i = 0; i < n; i++) {
+                const double x = std::abs(B.det.tick(0.5 * (L[i] + R[i]))); B.env = x > B.env ? ca * B.env + (1 - ca) * x : cr * B.env + (1 - cr) * x;
+                if ((i & 15) == 0) { const double lv = B.env > 1e-9 ? 20 * std::log10(B.env * 1.414) : -180; const double gdb = B.range * clampd((lv - B.thr) / 12, 0, 1); if (std::abs(gdb - B.g) > 0.05) { B.g = gdb; B.eq.set(sr, B.f, B.q, gdb); } }
+                B.eq.tick(L[i], R[i]);
+            }
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -1101,6 +1290,12 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "rotary") return std::make_unique<Rotary>();
     if (t == "autopan") return std::make_unique<AutoPan>();
     if (t == "lofi") return std::make_unique<LoFi>();
+    if (t == "pitchshift") return std::make_unique<PitchShift>();
+    if (t == "doubler") return std::make_unique<Doubler>();
+    if (t == "autofilter") return std::make_unique<AutoFilter>();
+    if (t == "amp") return std::make_unique<AmpSim>();
+    if (t == "subgen") return std::make_unique<SubGen>();
+    if (t == "dyneq") return std::make_unique<DynEq>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 
