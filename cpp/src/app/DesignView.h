@@ -121,7 +121,7 @@ private:
                     G.knob(juce::String(q.name).substring(0, 12), q.min, q.max > q.min ? q.max : q.min + 1, q.def, cur, on([this, i, key](double v) { if (i < D.fx.size()) D.fx[i].p.set(juce::Identifier(key), v); }), none(), false, {}, q.stepped ? 1 : 0);
                 }
             } else if (sp) for (auto& q : sp->params) {
-                if (!q.opts.empty()) { if (q.opts[0] == "@buses") continue; std::vector<std::pair<juce::String, juce::String>> o; for (auto& x : q.opts) o.push_back({ x, x }); const std::string k = q.k;
+                if (!q.opts.empty()) { if (q.opts[0][0] == '@') continue; std::vector<std::pair<juce::String, juce::String>> o; for (auto& x : q.opts) o.push_back({ x, x }); const std::string k = q.k;
                     G.pick(q.label, o, juce::String(f.str(k.c_str(), "")), [this, i, k](const juce::String& v) { if (i < D.fx.size()) { D.fx[i].p.set(juce::Identifier(k), v); changed(); } }, 110); continue; }
                 const std::string k = q.k; G.knob(q.label, q.lo, q.hi, q.def, f.num(k.c_str(), q.def), on([this, i, k](double v) { if (i < D.fx.size()) D.fx[i].p.set(juce::Identifier(k), v); }), none(), q.expo);
             }
@@ -132,7 +132,7 @@ private:
     std::map<std::string, std::vector<us::PluginInstance::Param>> plugParams;   // what each plug-in effect reported (its knobs)
     void addFx() {
         Menu m; m.head("Built-in");
-        for (auto& s : fxSpecs()) { if (std::string(s.type) == "duck" || std::string(s.type) == "meters") continue; const std::string t = s.type; m.item(s.name, [this, t] { D.fx.push_back(newFx(t)); if (t == "reverb" || t == "fdn" || t == "delay" || t == "echo") D.tail = std::max(D.tail, 2.0); build(); changed(); }); }
+        for (auto& s : fxSpecs()) { if (std::string(s.type) == "duck" || std::string(s.type) == "meters" || std::string(s.type) == "irverb") continue; const std::string t = s.type; m.item(s.name, [this, t] { D.fx.push_back(newFx(t)); if (t == "reverb" || t == "fdn" || t == "delay" || t == "echo") D.tail = std::max(D.tail, 2.0); build(); changed(); }); }
         m.head("Plug-ins");
         m.item(u8("Plug-in effect (CLAP / VST)…"), [this] { choosePlugin(this, false, [this](const juce::var& slot) {
             us::FxSlot f; f.id = us::newId(); f.type = "plugin"; f.on = true; if (auto* o = slot.getDynamicObject()) f.p = o->getProperties(); D.fx.push_back(f); build();

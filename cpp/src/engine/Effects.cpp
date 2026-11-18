@@ -1,5 +1,6 @@
 #include "Effects.h"
 #include "Analysis.h"
+#include "Samples.h"
 #include <complex>
 #include <map>
 #include <mutex>
@@ -1251,6 +1252,43 @@ public:
     }
 };
 
+// IR reverb: convolution with an imported sound (a recorded room, hall, plate, speaker or anything else), resampled
+// to the engine rate and normalised to unit energy, through the same partitioned convolver as the generated reverb.
+// The convolver is LAT samples late, so the dry path is delayed to match; pre-delay, low / high cut on the wet.
+class IrReverb : public Effect {
+    PartConv conv; std::string id; double pre = 0, gain = 1; WetDry m; DelayLine dl, dr, pl, pr; Biquad2 lo, hi; double lof = -1, hif = -1; std::vector<float> wl, wr; bool loaded = false;
+    void load() {
+        loaded = false; if (!samples || id.empty()) return; auto smp = samples->get(id); if (!smp || smp->length() < 2) return;
+        const double ratio = smp->sr / sr; const size_t n = std::min<size_t>((size_t)(smp->length() / ratio), (size_t)(sr * 12));
+        std::vector<std::vector<float>> ir(2, std::vector<float>(std::max<size_t>(n, 64), 0.f)); double e = 0;
+        for (int c = 0; c < 2; c++) { const auto& src = smp->ch[(size_t)std::min<int>(c, (int)smp->ch.size() - 1)];
+            for (size_t i = 0; i < n; i++) { const double p = i * ratio; const size_t k = (size_t)p; const double f = p - k; const float v = k + 1 < src.size() ? (float)(src[k] * (1 - f) + src[k + 1] * f) : 0.f; ir[(size_t)c][i] = v; e += (double)v * v; } }
+        const float k = (float)(1 / std::sqrt(std::max(1e-12, e / 2))); for (auto& ch : ir) for (auto& v : ch) v *= k;
+        conv.load(ir); loaded = true;
+    }
+public:
+    void prepare(double s, int b) override {
+        Effect::prepare(s, b); dl.init(LAT + 8); dr.init(LAT + 8); pl.init((size_t)(0.25 * s) + 8); pr.init((size_t)(0.25 * s) + 8);
+        wl.assign((size_t)std::max(b, 4096), 0.f); wr.assign(wl.size(), 0.f); lo.setType(FilterType::Highpass); hi.setType(FilterType::Lowpass); lof = hif = -1; id.clear();
+    }
+    void set(const FxSlot& f) override {
+        m.mix(f.num("mix", 0.3)); pre = f.num("pre", 0); gain = dbToGain(f.num("gain", 0));
+        const double a = f.num("lo", 20), b = f.num("hi", 20000); if (a != lof || b != hif) { lof = a; hif = b; lo.set(sr, lof, Q_BW2, 0); hi.set(sr, hif, Q_BW2, 0); }
+        const std::string n = f.str("ir", ""); if (n != id) { id = n; load(); }
+    }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double pd = pre / 1000 * sr;
+        for (int i = 0; i < n; i++) { pl.push(L[i]); pr.push(R[i]); wl[(size_t)i] = pd >= 1 ? pl.read(pd) : L[i]; wr[(size_t)i] = pd >= 1 ? pr.read(pd) : R[i]; }
+        if (loaded) conv.process(wl.data(), wr.data(), n); else std::fill_n(wl.data(), n, 0.f), std::fill_n(wr.data(), n, 0.f);
+        for (int i = 0; i < n; i++) {
+            float a = wl[(size_t)i], b = wr[(size_t)i]; lo.tick(a, b); hi.tick(a, b);
+            dl.push(L[i]); dr.push(R[i]);
+            L[i] = (float)(dl.read(LAT) * m.dry + a * gain * m.wet); R[i] = (float)(dr.read(LAT) * m.dry + b * gain * m.wet);
+        }
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -1296,6 +1334,7 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "amp") return std::make_unique<AmpSim>();
     if (t == "subgen") return std::make_unique<SubGen>();
     if (t == "dyneq") return std::make_unique<DynEq>();
+    if (t == "irverb") return std::make_unique<IrReverb>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 

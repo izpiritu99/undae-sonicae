@@ -485,6 +485,21 @@ int main(int argc, char** argv) {
                 if (!fin || pk < 0.01f || pk > 4) { clean = false; bad += std::string(ch.name) + "(" + std::to_string(pk) + ") "; } }
             check(known && allCat && clean, std::to_string(ui::fxChains().size()) + " effect chains: every slot and setting exists, every effect is in a Mixer category, each chain processes a mix cleanly" + (bad.empty() ? "" : ": " + bad));
         }
+        // IR reverb: an imported impulse (a click, then an echo at half level 0.1 s later) is what a click comes out as
+        {
+            const juce::File iw = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("undae-ir-test.wav"); iw.deleteFile();
+            { juce::AudioBuffer<float> b(1, 24000); b.clear(); b.setSample(0, 0, 0.8f); b.setSample(0, 4410, 0.4f); juce::WavAudioFormat f;
+              std::unique_ptr<juce::AudioFormatWriter> wr(f.createWriterFor(new juce::FileOutputStream(iw), 44100, 1, 24, {}, 0)); wr->writeFromAudioSampleBuffer(b, 0, 24000); }
+            ui::Doc di(eng, *bank); di.setProject(ui::blankProject()); const std::string irId = di.importAudio(iw); iw.deleteFile();
+            auto ir = ui::newFx("irverb"); ir.p.set("ir", juce::String(irId)); ir.p.set("mix", 1.0);
+            auto e = us::makeEffect("irverb"); e->samples = bank.get(); e->prepare(sr, 512); e->set(ir);
+            std::vector<float> L((size_t)N, 0.f), R((size_t)N, 0.f); L[0] = R[0] = 1;
+            for (int o = 0; o < N; o += 512) e->process(L.data() + o, R.data() + o, std::min(512, N - o));
+            int p1 = 0, p2 = 2000; for (int i = 0; i < 2000; i++) if (std::abs(L[(size_t)i]) > std::abs(L[(size_t)p1])) p1 = i; for (int i = 2000; i < 12000; i++) if (std::abs(L[(size_t)i]) > std::abs(L[(size_t)p2])) p2 = i;
+            const double ratio = std::abs(L[(size_t)p2]) / std::max(1e-9f, std::abs(L[(size_t)p1]));
+            check(!irId.empty() && p1 == 512 && std::abs((p2 - p1) - 4800) <= 2 && std::abs(ratio - 0.5) < 0.05, "IR reverb: a click through an imported impulse comes out at " + std::to_string(p1)
+                  + " samples (the convolver latency, 512) with its echo " + std::to_string(p2 - p1) + " samples later (0.1 s at 48 kHz: 4800) at " + std::to_string(ratio) + " of the level (0.5)");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

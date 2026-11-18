@@ -1019,6 +1019,16 @@ pitch shifter, auto-filter (envelope / LFO wah), amp simulator, sub-bass enhance
   sub-menus by `fxCategories()` (EQ & filter, Dynamics, Distortion & colour, Space, Modulation, Pitch & voice,
   Stereo & creative, Meters). Check: every chain slot and setting exists in the effect specs, every effect has a
   category, and each chain processes a mix cleanly.
+- **IR reverb** (`irverb`, self-test 49 / 49): convolution with any imported sound (option list "@samples" in the
+  Mixer: the project's imported audio). Effects now get the sample bank (`Effect::samples`, set by `Graph::build`
+  before `set()`, exports included). The impulse is resampled to the engine rate (up to 12 s), normalised to unit
+  energy and run through the same partitioned convolver as the generated reverb; the dry path is delayed by its 512
+  samples; pre-delay, low / high cut and gain on the wet. Not offered in Sound Design (no bank there). Check: a click
+  through an imported click-plus-echo impulse comes out 512 samples late with the echo exactly 0.1 s after, at 0.53 of
+  the level (0.5 set; resampling 44.1 to 48 kHz spreads the peak a little).
+
+Second round done. Next ideas: a beat slicer for sample channels (cut a loop at its hits, one slice per key, and
+write the pattern that replays it).
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -1034,14 +1044,14 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (48 after the effect chains; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (49 after the IR reverb; more as items are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
 4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`, `echo`, `glitch`, `vocoder`, `meters`, `pitchfix`, `multiband`, `flanger`, `ringmod`, `fshift`, `rotary`,
-   `autopan`, `lofi`, `pitchshift`, `doubler`, `autofilter`, `amp`, `subgen`, `dyneq`). The synth's "wt:" wave names and the five wavetable presets also need porting to
+   `autopan`, `lofi`, `pitchshift`, `doubler`, `autofilter`, `amp`, `subgen`, `dyneq`, `irverb`). The synth's "wt:" wave names and the five wavetable presets also need porting to
    `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp" to the Electron engine. Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there

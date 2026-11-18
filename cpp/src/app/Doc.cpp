@@ -82,6 +82,8 @@ const std::vector<FxSpec>& fxSpecs() {
         { "dyneq", "Dynamic EQ", { { "f1", "Band 1 Hz", 40, 2000, 250, true, {} }, { "q1", "Width 1", 0.3, 8, 1.5, true, {} }, { "t1", "Thresh 1", -60, 0, -30, false, {} }, { "r1", "Range 1", -24, 12, 0, false, {} },
             { "f2", "Band 2 Hz", 500, 16000, 4000, true, {} }, { "q2", "Width 2", 0.3, 8, 1.5, true, {} }, { "t2", "Thresh 2", -60, 0, -30, false, {} }, { "r2", "Range 2", -24, 12, -6, false, {} },
             { "att", "Attack", 0.001, 0.1, 0.005, true, {} }, { "rel", "Release", 0.02, 1, 0.12, true, {} } } },
+        { "irverb", "IR reverb", { { "ir", "Impulse", 0, 0, 0, false, { "@samples" } }, { "pre", "Pre-delay", 0, 200, 0, false, {} }, { "lo", "Low cut", 20, 1000, 20, true, {} },
+            { "hi", "High cut", 1000, 20000, 20000, true, {} }, { "gain", "Wet gain", -24, 12, 0, false, {} }, { "mix", "Mix", 0, 1, 0.3, false, {} } } },
     };
     return v;
 }
@@ -142,7 +144,7 @@ const std::vector<std::pair<const char*, std::vector<std::string>>>& fxCategorie
         { "EQ & filter", { "eq", "peq", "dyneq", "filter", "autofilter" } },
         { "Dynamics", { "comp", "multiband", "limiter", "gate", "deess", "trans", "duck" } },
         { "Distortion & colour", { "sat", "dist", "amp", "crush", "lofi", "subgen" } },
-        { "Space", { "reverb", "fdn", "delay", "echo" } },
+        { "Space", { "reverb", "fdn", "irverb", "delay", "echo" } },
         { "Modulation", { "chorus", "phaser", "flanger", "ringmod", "fshift", "rotary", "autopan" } },
         { "Pitch & voice", { "pitchfix", "pitchshift", "doubler", "vocoder" } },
         { "Stereo & creative", { "imager", "glitch" } },
@@ -155,7 +157,7 @@ us::FxSlot newFx(const std::string& type) {
     us::FxSlot f; f.id = us::newId(); f.type = type; f.on = true;
     if (auto* s = fxSpec(type)) for (auto& q : s->params) {
         if (q.opts.empty()) f.p.set(q.k, q.def);
-        else f.p.set(q.k, juce::String(q.opts[0] == "@buses" ? "" : q.opts[0]));
+        else f.p.set(q.k, juce::String(q.opts[0][0] == '@' ? "" : q.opts[0]));
     }
     return f;
 }

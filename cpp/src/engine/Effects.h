@@ -9,6 +9,8 @@
 #include "Dsp.h"
 #include "Project.h"
 
+namespace us { class SampleBank; }
+
 namespace us {
 
 // Live readings of a Meters slot, shared between the audio thread (writes) and the mixer panel (reads), found by slot id.
@@ -35,6 +37,7 @@ public:
     uint32_t frame = 0;                                     // where the coming block starts on the engine clock (plug-ins need it)
     double bpm = 120;                                       // the project tempo
     double beat = -1;                                       // song position of the block start in quarter notes; -1 when stopped
+    const SampleBank* samples = nullptr;                     // the sample bank (impulse responses), set before set()
     int keyRoot = 0; const std::string* keyScale = nullptr;  // the project key (pitch correction "song" setting)
 protected:
     double sr = 48000;
