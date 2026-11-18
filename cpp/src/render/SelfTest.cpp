@@ -353,6 +353,24 @@ int main(int argc, char** argv) {
                   "synth wavetables: the pulse table at position 0 has no 2nd harmonic (" + std::to_string(evenSq) + "), at 1 a strong one (" + std::to_string(evenNar) + "); the opening table's 10th harmonic goes "
                   + std::to_string(darkHi) + " -> " + std::to_string(openHi) + "; the wavetable presets play" + (badP.empty() ? "" : " (not " + badP + ")"));
         }
+        // granular sampler: grains of a 440 Hz sample keep its pitch, follow the keyboard, sound for as long as the note
+        {
+            auto smp = std::make_shared<us::Sample>(); smp->sr = 48000; smp->ch.assign(1, std::vector<float>(48000)); for (int i = 0; i < 48000; i++) smp->ch[0][(size_t)i] = (float)(0.5 * std::sin(2 * 3.14159265358979 * 440 * i / 48000.0));
+            us::Channel C; C.root = 69; C.gran.on = true; C.gran.size = 0.06; C.gran.density = 40; C.gran.jitter = 0.2; C.gran.spread = 0.5;
+            auto play = [&](int note, double dur) { us::NoteOpts o; auto v = us::makeSampleVoice(smp, C, note, 1.0, 0, dur, o, sr); std::vector<float> L((size_t)N, 0.f), R((size_t)N, 0.f);
+                for (int off = 0; off < N; off += 512) v->render(L.data() + off, R.data() + off, nullptr, std::min(512, N - off), off / sr, sr); return std::make_pair(L, R); };
+            auto a = play(69, 0.8), b = play(81, 0.8);
+            std::vector<float> ma((size_t)N), mb((size_t)N); for (int i = 0; i < N; i++) { ma[(size_t)i] = a.first[(size_t)i] + a.second[(size_t)i]; mb[(size_t)i] = b.first[(size_t)i] + b.second[(size_t)i]; }
+            auto focus = [&](const std::vector<float>& v, double hz) { return tone(v, hz) / std::max(tone(v, hz * 0.9439), tone(v, hz * 1.0595)); };   // against the semitones either side (overlapping grains with random phases spread the pitch into a band of a few tens of Hz, so the unison margin is smaller)
+            const double pa = focus(ma, 440), pb = focus(mb, 880), held = win(ma, 0.3, 0.7), after = win(ma, 0.95, 1.0);
+            bool fin = true; for (float v : ma) fin &= std::isfinite(v);
+            us::Project gp = ui::blankProject(); auto gc = ui::newChannel(gp, "sample", "Grains", "808:kick"); gc.gran.on = true; gc.gran.size = 0.2; gc.gran.spray = 3; gp.channels.push_back(gc);
+            const juce::File gf = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("undae-selftest-gran.undae.json"); us::saveProject(gp, gf); auto gb = us::loadProject(gf); gf.deleteFile();
+            const bool saved = gb.channels.size() == 1 && gb.channels[0].gran.on && std::abs(gb.channels[0].gran.size - 0.2) < 1e-9 && std::abs(gb.channels[0].gran.spray - 3) < 1e-9;
+            check(fin && pa > 2 && pb > 10 && held > -20 && after < held - 40 && saved,
+                  "granular: grains of a 440 Hz sample keep 440 Hz (" + std::to_string(20 * std::log10(pa)) + " dB over the neighbouring semitones), an octave up 880 Hz (" + std::to_string(20 * std::log10(pb)) + " dB), " + std::to_string(held) + " dB while held, "
+                  + std::to_string(after - held) + " dB after the release; settings saved and reloaded");
+        }
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

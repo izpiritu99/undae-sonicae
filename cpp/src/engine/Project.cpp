@@ -83,6 +83,8 @@ Project parseProject(const juce::var& root) {
         ch.tune = num(c, "tune", 0); ch.fine = num(c, "fine", 0); ch.start = num(c, "start", 0); ch.att = num(c, "att", 0); ch.rel = num(c, "rel", 0.08);
         ch.gate = flag(c, "gate", false); ch.rev = flag(c, "rev", false); ch.cut = flag(c, "cut", false); ch.choke = (int)num(c, "choke", 0);
         const juce::var sy = c.getProperty("synth", juce::var()); if (sy.isObject()) ch.synth = synthOf(sy);
+        if (const juce::var gr = c.getProperty("gran", juce::var()); gr.isObject()) { auto& G = ch.gran; G.on = flag(gr, "on", false); G.pos = num(gr, "pos", 0.3); G.scan = num(gr, "scan", 0); G.size = num(gr, "size", 0.08);
+            G.density = num(gr, "density", 24); G.jitter = num(gr, "jitter", 0.03); G.spray = num(gr, "spray", 0); G.spread = num(gr, "spread", 0.6); G.rev = num(gr, "rev", 0); }
         ch.plug = c.getProperty("plug", juce::var()); ch.group = str(c, "group", "");
         pr.channels.push_back(std::move(ch));
     }
@@ -237,6 +239,9 @@ juce::var projectToVar(const Project& p) {
         co->setProperty("root", c.root); co->setProperty("sample", S(c.sample)); co->setProperty("tune", c.tune); co->setProperty("fine", c.fine); co->setProperty("start", c.start);
         co->setProperty("att", c.att); co->setProperty("rel", c.rel); co->setProperty("gate", c.gate); co->setProperty("rev", c.rev); co->setProperty("cut", c.cut); co->setProperty("choke", c.choke);
         co->setProperty("synth", c.synth ? synthVar(*c.synth, clone(v.getProperty("synth", juce::var()))) : juce::var());
+        if (c.gran.on || co->hasProperty("gran")) { juce::var g(new juce::DynamicObject()); auto* go = g.getDynamicObject(); const auto& G = c.gran;
+            go->setProperty("on", G.on); go->setProperty("pos", G.pos); go->setProperty("scan", G.scan); go->setProperty("size", G.size); go->setProperty("density", G.density);
+            go->setProperty("jitter", G.jitter); go->setProperty("spray", G.spray); go->setProperty("spread", G.spread); go->setProperty("rev", G.rev); co->setProperty("gran", g); }
         if (!c.plug.isVoid()) co->setProperty("plug", c.plug);
         if (!c.group.empty()) co->setProperty("group", S(c.group)); else co->removeProperty("group");
         chans.add(v);

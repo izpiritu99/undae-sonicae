@@ -253,9 +253,62 @@ private:
 
 }   // namespace
 
+namespace {
+// Granular voice: Hann-windowed grains read from the sample (see GranP), scheduled at `density` per second with 30 %
+// random spacing, for as long as the note is held, then faded over the channel's release.
+class GrainVoice : public Voice {
+public:
+    GrainVoice(SampleRef s, const Channel& C, int n, double vel, double t, double dur, const NoteOpts& o, double sr_) : smp(s), G(C.gran), sr(sr_) {
+        note = n; t0 = t; rate = std::pow(2.0, (n - C.root + C.tune + C.fine / 100) / 12.0) * smp->sr / sr; bendC = o.bend;
+        A = std::max(C.att, 0.003); R = std::max(C.rel, 0.02) * std::pow(4.0, o.rel); g = std::pow(vel, 1.5) / std::sqrt(std::max(1.0, G.density * G.size * 0.6));
+        relAt = dur >= 0 ? t0 + dur : -1; end = relAt >= 0 ? relAt + R * 5 : 1e30; notePan = o.pan;
+    }
+    bool stereo() const override { return true; }
+    void release(double t) override { if (relAt < 0 || t < relAt) { relAt = t; end = t + R * 5; } released = true; }
+    void kill(double t) override { relAt = std::max(t, t0); R = 0.005; end = relAt + 0.03; released = true; }
+    void slide(int to, double, double) override { (void)to; }
+    void setBend(double cents) override { bendC = cents; }
+    void render(float* L, float* Rr, float*, int n, double t, double) override {
+        const double len = (double)smp->length(), dt = 1.0 / sr; const bool two = smp->ch.size() > 1; const float* c0 = smp->ch[0].data(); const float* c1 = two ? smp->ch[1].data() : c0;
+        Rng& r = globalRng(); const double bendF = std::exp2(bendC / 1200);
+        for (int i = 0; i < n; i++, t += dt) {
+            const double tl = t - t0; if (tl < 0) continue; if (t >= end) break;
+            if ((relAt < 0 || t < relAt) && tl >= nextGrain && active < MAXG) {   // new grains only while held
+                Grain& q = grains[active++];
+                double p = G.pos + G.scan * tl + r.bi() * G.jitter; p -= std::floor(p);
+                q.len = std::max(16.0, G.size * sr); q.age = 0;
+                q.inc = rate * bendF * std::exp2(r.bi() * G.spray / 12) * (r.next() < G.rev ? -1 : 1);
+                q.pos = p * (len - 2); const double pan = clampd(r.bi() * G.spread + notePan, -1, 1); q.gl = std::cos((pan + 1) * PI / 4); q.gr = std::sin((pan + 1) * PI / 4);
+                nextGrain = tl + (1 / std::max(0.5, G.density)) * (0.7 + 0.6 * r.next());
+            }
+            double env = tl < A ? tl / A : 1; if (relAt >= 0 && t >= relAt) env *= std::exp(-(t - relAt) / (R / 4));
+            double ol = 0, orr = 0;
+            for (int k = 0; k < active;) {
+                Grain& q = grains[k];
+                const double w = 0.5 - 0.5 * std::cos(2 * PI * q.age / q.len);
+                double p = q.pos; while (p < 0) p += len - 2; while (p >= len - 2) p -= len - 2;
+                const size_t j = (size_t)p; const double f = p - (double)j;
+                const double a = c0[j] + (c0[j + 1] - c0[j]) * f, b = c1[j] + (c1[j + 1] - c1[j]) * f;
+                ol += a * w * q.gl; orr += b * w * q.gr;
+                q.pos += q.inc; q.age += 1;
+                if (q.age >= q.len) { grains[k] = grains[--active]; continue; }
+                k++;
+            }
+            const double gg = g * env * 1.4;
+            L[i] += (float)(ol * gg); Rr[i] += (float)(orr * gg);
+        }
+    }
+private:
+    struct Grain { double pos = 0, inc = 1, age = 0, len = 1, gl = 0.7, gr = 0.7; };
+    static constexpr int MAXG = 96;
+    SampleRef smp; GranP G; double sr, rate = 1, bendC = 0, A = 0.003, R = 0.1, g = 1, relAt = -1, nextGrain = 0, notePan = 0; Grain grains[MAXG]; int active = 0;
+};
+}   // namespace
+
 std::unique_ptr<Voice> makeSynthVoice(const SynthP& P, int note, double vel, double t, double dur, const NoteOpts& o, double sr) { return std::make_unique<SynthVoice>(P, note, vel, t, dur, o, sr); }
 std::unique_ptr<Voice> makeSampleVoice(SampleRef smp, const Channel& C, int note, double vel, double t, double dur, const NoteOpts& o, double sr) {
     if (!smp || smp->length() < 2) return nullptr;
+    if (C.gran.on && smp->length() > 64) return std::make_unique<GrainVoice>(smp, C, note, vel, t, dur, o, sr);
     return std::make_unique<SampleVoice>(smp, C, note, vel, t, dur, o, sr);
 }
 

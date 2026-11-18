@@ -29,11 +29,17 @@ struct SynthP {
     std::string mode = "poly"; double glide = 0; int voices = 8; double vel = 0.6, gain = 0.7, bendRange = 2;
 };
 
+// Granular playback of a sample channel: grains of `size` s, `density` per second, taken around `pos` (0..1 of the
+// sample) which moves at `scan` (sample lengths per second), scattered by `jitter` (fraction of the sample), each
+// re-pitched by up to `spray` semitones and reversed with probability `rev`, spread across the stereo field.
+struct GranP { bool on = false; double pos = 0.3, scan = 0, size = 0.08, density = 24, jitter = 0.03, spray = 0, spread = 0.6, rev = 0; };
+
 struct Channel {
     std::string id, name, type = "sample", color = "#5aa9ff";   // type: sample | synth | plugin
     double vol = 0.8, pan = 0; bool mute = false, solo = false;
     std::string bus = "master"; int root = 60; std::string sample = "inst:keys";
     double tune = 0, fine = 0, start = 0, att = 0, rel = 0.08; bool gate = false, rev = false, cut = false; int choke = 0;
+    GranP gran;
     std::optional<SynthP> synth;
     juce::var plug;   // plug-in slot { path, pid, name, fmt, state, v<id>... }
     std::string group;   // rack group (Alt+G)

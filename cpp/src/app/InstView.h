@@ -123,6 +123,17 @@ private:
         G.toggle("Reverse", c->rev, [this](bool b) { if (auto* x = ch()) { x->rev = b; doc.commit(); } }, "Play backwards");
         G.toggle("Cut self", c->cut, [this](bool b) { if (auto* x = ch()) { x->cut = b; doc.commit(); } }, "Each new note cuts the previous one");
         G.pick("Choke group", { { "0", "None" }, { "1", "1" }, { "2", "2" }, { "3", "3" }, { "4", "4" } }, juce::String(c->choke), [this](const juce::String& v) { if (auto* x = ch()) { x->choke = v.getIntValue(); doc.commit(); } }, 90);
+        G.card("Granular", c->gran.on, [this](bool b) { if (auto* x = ch()) { x->gran.on = b; doc.commit(); } });
+        auto Gr = [this]() -> us::GranP& { return ch()->gran; };
+        G.knob("Position", 0, 1, 0.3, c->gran.pos, live([Gr](double v) { Gr().pos = v; }), done(), false, pct);
+        G.knob("Scan", -1, 1, 0, c->gran.scan, live([Gr](double v) { Gr().scan = v; }), done(), false, [](double v) { return juce::String(v, 2) + "/s"; });
+        G.knob("Grain size", 0.01, 0.5, 0.08, c->gran.size, live([Gr](double v) { Gr().size = v; }), done(), true, secs);
+        G.knob("Density", 1, 120, 24, c->gran.density, live([Gr](double v) { Gr().density = v; }), done(), true, [](double v) { return juce::String(juce::roundToInt(v)) + "/s"; });
+        G.knob("Jitter", 0, 0.5, 0.03, c->gran.jitter, live([Gr](double v) { Gr().jitter = v; }), done(), false, pct);
+        G.knob("Pitch spray", 0, 12, 0, c->gran.spray, live([Gr](double v) { Gr().spray = v; }), done(), false, [](double v) { return juce::String(v, 1) + "st"; });
+        G.knob("Spread", 0, 1, 0.6, c->gran.spread, live([Gr](double v) { Gr().spread = v; }), done(), false, pct);
+        G.knob("Reverse", 0, 1, 0, c->gran.rev, live([Gr](double v) { Gr().rev = v; }), done(), false, pct);
+        G.note("Plays the sample as a cloud of short grains: hold a note for a texture. Scan moves through the sample by itself; Jitter and Pitch spray scatter the grains.");
     }
     std::unique_ptr<juce::FileChooser> chooser;
     void upload() {
