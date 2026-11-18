@@ -1071,8 +1071,9 @@ Second round done.
   the normal package name. It starts, the Mixer's add menu shows the new categories and Chains, the Mastering chain
   (parametric EQ, multiband, stereo width, limiter, meters) adds and shows its panels, a synth channel with four steps
   plays. CPU (`top`, whole app, % of one core): about 11 % stopped, 41-45 % playing the synth through the master chain.
-  No crashes. Found: on touch, a sub-menu (the add menu's categories, Chains) does not open on a quick tap, only on a
-  longer press; worth fixing (JUCE opens sub-menus on hover).
+  No crashes. Sub-menus (the add menu's categories, Chains) open on a real finger tap (the owner checked); they only
+  failed for adb's `input tap`, which lifts within milliseconds, under JUCE's 100 ms rest before a sub-menu opens. Use
+  `input swipe x y x y 300` for taps on sub-menu items when testing over adb.
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
@@ -1100,8 +1101,7 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    `synth.js` (unknown waves there fall back to sine), the sampler's "gran" and "zones" settings, the synth's "model" source, and the channel "arp", "slice" / "slices" to the Electron engine. Until then the Electron app ignores them (the project opens, but saving it from there may
    drop those settings: not checked).
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
-6. **Android**: built on Windows and run on the owner's phone (see "On the owner's phone"); fix sub-menus opening on
-   a quick tap.
+6. **Android**: built on Windows and run on the owner's phone (see "On the owner's phone").
 7. **Branches**: the laptop's `main` was fast-forwarded to `windows`. Decide whether `main` simply follows `windows`
    from now on, and push the result back to wherever the canonical copy lives.
 8. **Anything else added on Windows**: each later Windows change that touches platform code (`PluginHost.cpp`,
