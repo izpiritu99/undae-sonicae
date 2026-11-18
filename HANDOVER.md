@@ -878,7 +878,8 @@ Next in the order: the tempo-aware delay (8) and glitch / stutter (9), then the 
 
 ## Linux catch-up list (for later; work is Windows-only for now)
 
-The owner is working on Windows only for now. Nothing below needs doing until they go back to the laptop. Keep this
+The owner is working on Windows only for now (Android work is fine from Windows: the SDK, Android Studio, the emulator
+and JDK 25 are installed there). Nothing below needs doing until they go back to the laptop. Keep this
 list current as Windows work adds to it.
 
 State when the list was started: the laptop repository is `~/Desktop/New Folder/undae-sonicae`, its `main` at 753c525
@@ -897,8 +898,8 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
    `imager`). Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
-6. **Android**: rebuild the APK and check that the new effects run there (the saturator uses JUCE's
-   `dsp::Oversampling`; check CPU on the phone).
+6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
+   (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).
 7. **Branches**: the laptop's `main` was fast-forwarded to `windows`. Decide whether `main` simply follows `windows`
    from now on, and push the result back to wherever the canonical copy lives.
 8. **Anything else added on Windows**: each later Windows change that touches platform code (`PluginHost.cpp`,
