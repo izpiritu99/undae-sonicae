@@ -135,6 +135,7 @@ struct Engine::Graph {
     std::atomic<float>* peaks = nullptr; std::atomic<float>* waveLo = nullptr; std::atomic<float>* waveHi = nullptr; size_t npeaks = 0; bool offline = false; int plugTimeout = 8;
     std::function<std::shared_ptr<PluginInstance>(const std::string&, const juce::var&)> plugFor;   // a loaded instance for a slot (pool or fresh)
     std::shared_ptr<Project> P; double sr = 48000; int block = 128; SampleBank* bank = nullptr;
+    double tickAt = 0, timeAt = 0; bool rolling = false;   // the transport: song tick `tickAt` was at engine time `timeAt` (tempo-aware effects)
     std::vector<std::unique_ptr<Strip>> strips; std::vector<std::unique_ptr<BusNode>> buses; std::vector<BusNode*> order; BusNode* master = nullptr;
     std::map<std::string, Strip*> byChan; std::map<std::string, BusNode*> byBus;
     std::vector<ClipPlay> clips; std::map<std::string, SampleRef> stretched;
@@ -320,7 +321,7 @@ struct Engine::Graph {
             const double w = B.mono ? 0 : B.width, inv = B.inv ? -1 : 1, d = (1 + w) / 2, x = (1 - w) / 2;
             if (inv != 1 || w != 1) for (int i = 0; i < n; i++) { const double l = L[i] * inv, r = R[i] * inv; L[i] = (float)(d * l + x * r); R[i] = (float)(x * l + d * r); }
             for (auto& [e, src] : b.sides) e->side(src->tapL.data(), src->tapR.data(), n);
-            for (size_t i = 0; i < b.fx.size(); i++) if (b.slots[i].on) { b.fx[i]->frame = (uint32_t)std::llround(t * sr); b.fx[i]->process(L, R, n); }
+            for (size_t i = 0; i < b.fx.size(); i++) if (b.slots[i].on) { auto& fx = *b.fx[i]; fx.frame = (uint32_t)std::llround(t * sr); fx.bpm = P->bpm; fx.beat = rolling ? (tickAt + (t - timeAt) / P->secondsPerTick()) / PPQ : -1; fx.process(L, R, n); }
             std::copy_n(L, n, b.tapL.data()); std::copy_n(R, n, b.tapR.data());
             const double out = B.mute || (anyBusSolo && !B.solo && B.kind == "insert") ? 0 : 1, g = b.vol * out;
             for (int i = 0; i < n; i++) { float l = L[i], r = R[i]; panStereo(l, r, b.pan); L[i] = l * (float)g; R[i] = r * (float)g; }
@@ -431,7 +432,7 @@ juce::AudioBuffer<float> Engine::render(Mode m, const std::string& pid, int loop
         if (!pi->load(slot, rate, err)) { plugErrors.push_back(slot.getProperty("name", "plug-in").toString().toStdString() + " (" + err + ")"); return std::shared_ptr<PluginInstance>(); }
         return pi;
     };
-    g->build();
+    g->build(); g->rolling = true;   // an export plays from tick 0 at time 0
     const int frames = (int)std::ceil((L * spt + 2.5) * rate);
     auto evs = collect(P, m, pt, 0, L); std::sort(evs.begin(), evs.end(), [](const Event& a, const Event& b) { return a.tick + a.sw < b.tick + b.sw; });
     if (m == Mode::Song) for (auto& a : P.audio) if (!a.mute) g->addClip(a, g->clipBuf(a), std::round(a.start * P.bar()) * spt, a.off * g->ratio(a), g->clipDur(a));
@@ -551,7 +552,7 @@ void Engine::process(float* L, float* R, int n) {
         // stopped, a second of silence and nothing able to sound: skip the effects (a phone's battery) until a note, preview or play
         const bool restable = !playing && clicks.empty() && g.canRest();
         if (restable && quietFrames >= sr) { std::fill_n(L + off, m, 0.f); std::fill_n(R + off, m, 0.f); tNow = te; continue; }
-        g.inPtr = inPtr; g.inCount = inCount; g.inOff = off;
+        g.inPtr = inPtr; g.inCount = inCount; g.inOff = off; g.rolling = playing && !countingIn; g.tickAt = aTick; g.timeAt = aTime;
         g.render(L + off, R + off, m, tNow);
         if (!clicks.empty()) renderClicks(L + off, R + off, m, tNow);
         if (restable) { float pk = 0; for (int i = off; i < off + m; i++) pk = std::max({ pk, std::abs(L[i]), std::abs(R[i]) }); quietFrames = pk < 1e-6f ? quietFrames + m : 0; } else quietFrames = 0;

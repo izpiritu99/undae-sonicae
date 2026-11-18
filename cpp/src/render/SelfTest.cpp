@@ -202,6 +202,36 @@ int main(int argc, char** argv) {
         const double lowD = 20 * std::log10(tone(side, 60) / 0.5 + 1e-12), highD = 20 * std::log10(tone(side, 2000) / 0.5 + 1e-12);
         auto im0 = ui::newFx("imager"); im0.p.set("width", 0.0); auto mo = runSt(im0, sL, sR); float diff0 = 0; for (int i = 0; i < N; i++) diff0 = std::max(diff0, std::abs(mo.first[(size_t)i] - mo.second[(size_t)i]));
         check(lowD < -20 && std::abs(highD) < 1 && diff0 < 1e-6f, "stereo width: bass mono below 150 Hz takes the 60 Hz side down " + std::to_string(-lowD) + " dB, 2 kHz side changes " + std::to_string(highD) + " dB; width 0 % is mono");
+
+        // third batch: tempo-aware effects, fed tempo and song position as the engine does (120 BPM from beat 0)
+        auto runTempo = [&](const us::FxSlot& f, std::vector<float> L, std::vector<float> R) {
+            auto e = us::makeEffect(f.type); e->prepare(sr, 512); e->set(f);
+            for (int o = 0; o < N; o += 512) { e->bpm = 120; e->beat = o / sr * 2; e->process(L.data() + o, R.data() + o, std::min(512, N - o)); }
+            return std::make_pair(L, R);
+        };
+        auto peakIn = [&](const std::vector<float>& v, int a, int b) { int at = a; for (int i = a; i < b; i++) if (std::abs(v[(size_t)i]) > std::abs(v[(size_t)at])) at = i; return at; };
+        std::vector<float> click((size_t)N, 0.f); click[0] = 1;
+        auto ec = ui::newFx("echo"); ec.p.set("fb", 0.5); ec.p.set("lo", 20.0); ec.p.set("hi", 20000.0); ec.p.set("mix", 1.0);
+        auto eo = runTempo(ec, click, click).first; const int p1 = peakIn(eo, 1000, 18000), p2 = peakIn(eo, 18000, 30000); auto en = [&](int c) { double e = 0; for (int i = c - 200; i < c + 200; i++) e += (double)eo[(size_t)i] * eo[(size_t)i]; return std::sqrt(e); }; const double ratio = en(p2) / en(p1);   // energy: the loop filter spreads the click
+        auto epp = ec; epp.p.set("mode", juce::String("ping-pong")); auto po = runTempo(epp, click, click);
+        const double rFirst = std::abs(po.second[(size_t)peakIn(po.second, 11000, 13000)]), rSecond = std::abs(po.second[(size_t)peakIn(po.second, 23000, 25000)]);
+        check(std::abs(p1 - 12000) <= 3 && std::abs(p2 - 24000) <= 6 && ratio > 0.4 && ratio < 0.6 && rFirst < 1e-3 && rSecond > 0.3,
+              "tempo delay: 1/8 at 120 BPM echoes at sample " + std::to_string(p1) + " and " + std::to_string(p2) + " (12000, 24000), feedback 0.5 gives " + std::to_string(ratio) + "; ping-pong answers on the right one echo later");
+        {   // the engine hands its tempo to effects in an export: a 1/4 echo of a kick at 120 BPM lands 0.5 s later
+            us::Project tp = ui::blankProject(); tp.bpm = 120; auto kc = ui::newChannel(tp, "sample", "Kick", "808:kick"); kc.bus = "master"; tp.channels.push_back(kc);
+            us::Note kn; kn.id = us::newId(); kn.t = 0; kn.d = 24; kn.n = 60; kn.v = 1; tp.patterns[0].notes[kc.id].push_back(kn);
+            auto q = ui::newFx("echo"); q.p.set("sync", juce::String("1/4")); q.p.set("fb", 0.0); q.p.set("mix", 0.5); q.p.set("lo", 20.0); q.p.set("hi", 20000.0); tp.buses[0].fx.insert(tp.buses[0].fx.begin(), q);
+            us::Engine te(bank); te.prepare(48000, 512); te.setProject(std::make_shared<us::Project>(tp));
+            auto tb = te.render(us::Mode::Pattern, tp.patterns[0].id, 1, 48000); std::vector<float> m0((size_t)tb.getNumSamples()); for (int i = 0; i < tb.getNumSamples(); i++) m0[(size_t)i] = tb.getSample(0, i);
+            const int k0 = peakIn(m0, 0, 12000), k1 = peakIn(m0, 18000, 36000);
+            check(std::abs((k1 - k0) - 24000) <= 8, "tempo delay in an export follows the project tempo: the echo comes " + std::to_string(k1 - k0) + " samples after the kick (24000)");
+        }
+        std::vector<float> mus((size_t)N); for (int i = 0; i < N; i++) mus[(size_t)i] = (float)(0.3 * std::sin(i * 0.0371) + 0.2 * std::sin(i * 0.1173 + 1) + 0.1 * std::sin(i * 0.0059));
+        auto gr = ui::newFx("glitch"); gr.p.set("repeat", 1.0); gr.p.set("reverse", 0.0); gr.p.set("stop", 0.0); gr.p.set("gate", 0.0);
+        auto ro = runTempo(gr, mus, mus).first; float repD = 0; for (int j = 200; j < 2800; j++) repD = std::max(repD, std::abs(ro[(size_t)(24000 + j)] - ro[(size_t)(24000 + j + 3000)]));
+        auto gv = gr; gv.p.set("repeat", 0.0); gv.p.set("reverse", 1.0); auto vo = runTempo(gv, mus, mus).first; float revD = 0; for (int o = 200; o < 11800; o++) revD = std::max(revD, std::abs(vo[(size_t)(24000 + o)] - mus[(size_t)(24000 - 1 - o)]));
+        auto gd = ui::newFx("glitch"); gd.p.set("stop", 0.3); auto d1 = runTempo(gd, mus, mus).first, d2 = runTempo(gd, mus, mus).first; bool same = d1 == d2, fin = true; for (float v : d1) fin &= std::isfinite(v);
+        check(repD < 1e-4f && revD < 1e-4f && same && fin, "glitch: a repeat step loops a 1/32 slice (difference " + std::to_string(repD) + "), a reverse step plays the step before backwards (" + std::to_string(revD) + "), and the same song gives the same glitches every time");
     }
     std::cout << (fails ? "FAILED: " + std::to_string(fails) : std::string("all passed")) << "\n";
     return fails ? 1 : 0;

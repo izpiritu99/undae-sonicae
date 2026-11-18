@@ -876,6 +876,19 @@ Second batch (2026-11-17, Windows), self-test 30 / 30:
   widening, balance. Check: the 60 Hz side drops 32 dB with bass mono at 150 Hz, 2 kHz untouched; width 0 % is mono.
 Next in the order: the tempo-aware delay (8) and glitch / stutter (9), then the vocoder (10).
 
+Third batch (2026-11-17, Windows), self-test 33 / 33. Effects now know the tempo and the song position: `Effect::bpm`
+and `Effect::beat` (quarter notes since the song start, -1 when stopped), set by `Graph::render` from the transport
+(`Graph::tickAt` / `timeAt` / `rolling`; exports roll from tick 0).
+- **Tempo delay** (`echo`, item 8): note lengths from 1/16 to a bar or free ms, stereo or ping-pong, right side
+  later by up to 50 %, low / high cut and drive inside the feedback, wow / flutter, ducking; time changes glide. Checks:
+  1/8 at 120 BPM echoes at exactly 12000 and 24000 samples; in an export of a 120 BPM project a 1/4 echo lands 24000
+  samples after the kick.
+- **Glitch** (`glitch`, item 9): every 1/16-1/2 note a seeded choice (the same on every play and export) of pass,
+  repeat (loop the last 1/64-1/8), reverse (the previous step backwards), tape stop, chop; "Pattern" picks another
+  sequence. Stopped, it runs on its own clock at the project tempo. Checks: a repeat step is periodic in the slice, a
+  reverse step is the previous step backwards, two renders are identical.
+Next in the order: the vocoder (10), the analyser and meters (11), pitch correction (12).
+
 ## Linux catch-up list (for later; work is Windows-only for now)
 
 The owner is working on Windows only for now (Android work is fine from Windows: the SDK, Android Studio, the emulator
@@ -890,13 +903,13 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    the branch some other way if the stick is not used).
 2. **Build and self-test**: `cmake --build cpp/build`, then
    `cpp/build/undae-selftest_artefacts/Release/undae-selftest cpp/examples/first-light.undae.json`. Every check must
-   pass (30 at 7264170; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
+   pass (33 after the tempo effects; more as effects are added). Fix any gcc-only warnings or errors the MSVC build did not show.
 3. **Wine VST hosts**: run `native/build.sh` so the Linux / Wine builds of `undae-vsthost*` come from the same source as
    the Windows ones (the Windows changes to `dos_path`, `scan_dir` and the unload-free VST2 scan were never tried under
    Wine). Then `undae-plugtest` with the usual Wine plug-ins.
 4. **Electron edition**: `app/js/audio/fx.js` `makeFx` fails on effect types it does not know. Either make unknown
    types pass audio through, or port the built-in effects (so far: `peq`, `deess`, `sat`, `fdn`, `gate`, `trans`,
-   `imager`). Until then, do not open projects that use them in the Electron app.
+   `imager`, `echo`, `glitch`). Until then, do not open projects that use them in the Electron app.
 5. **Compare renders**: `undae-compare` between a Windows render and a Linux render of First Light (never done).
 6. **Android**: can be done from Windows (not Linux-only). Rebuild the APK and check that the new effects run there
    (the saturator uses JUCE's `dsp::Oversampling`; check CPU on the phone).

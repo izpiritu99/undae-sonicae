@@ -38,6 +38,13 @@ const std::vector<FxSpec>& fxSpecs() {
         { "trans", "Transients", { { "attack", "Attack", -100, 100, 0, false, {} }, { "sustain", "Sustain", -100, 100, 0, false, {} }, { "out", "Output", -18, 18, 0, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
         { "imager", "Stereo width", { { "width", "Width %", 0, 200, 100, false, {} }, { "bass", "Bass", 0, 0, 0, false, { "off", "mono" } }, { "mono", "Mono below Hz", 40, 500, 120, true, {} },
             { "haas", "Widen ms", 0, 30, 0, false, {} }, { "bal", "Balance", -1, 1, 0, false, {} } } },
+        { "echo", "Tempo delay", { { "sync", "Time", 0, 0, 0, false, { "1/8", "1/16", "1/8 triplet", "1/8 dotted", "1/4 triplet", "1/4", "1/4 dotted", "1/2", "1 bar", "free" } },
+            { "mode", "Echoes", 0, 0, 0, false, { "stereo", "ping-pong" } }, { "time", "Free ms", 20, 2000, 375, true, {} }, { "spread", "Right later", 0, 0.5, 0, false, {} },
+            { "fb", "Feedback", 0, 0.98, 0.45, false, {} }, { "lo", "Low cut", 20, 2000, 120, true, {} }, { "hi", "High cut", 1000, 20000, 6000, true, {} },
+            { "drive", "Drive", 0, 1, 0, false, {} }, { "wow", "Wow", 0, 1, 0, false, {} }, { "duck", "Duck", 0, 1, 0, false, {} }, { "mix", "Mix", 0, 1, 0.3, false, {} } } },
+        { "glitch", "Glitch", { { "grid", "Every", 0, 0, 0, false, { "1/8", "1/16", "1/4", "1/2" } }, { "slice", "Repeat size", 0, 0, 0, false, { "1/32", "1/16", "1/8", "1/64" } },
+            { "repeat", "Repeat", 0, 1, 0.3, false, {} }, { "reverse", "Reverse", 0, 1, 0.15, false, {} }, { "stop", "Tape stop", 0, 1, 0.1, false, {} }, { "gate", "Chop", 0, 1, 0.1, false, {} },
+            { "seed", "Pattern", 1, 64, 1, false, {} }, { "mix", "Mix", 0, 1, 1, false, {} } } },
     };
     return v;
 }

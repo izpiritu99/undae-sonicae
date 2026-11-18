@@ -18,6 +18,8 @@ public:
     virtual void side(const float*, const float*, int) {}   // that signal, before process() for the same block
     virtual void offlineReady() {}                          // offline renders: finish any background preparation first
     uint32_t frame = 0;                                     // where the coming block starts on the engine clock (plug-ins need it)
+    double bpm = 120;                                       // the project tempo
+    double beat = -1;                                       // song position of the block start in quarter notes; -1 when stopped
 protected:
     double sr = 48000;
 };

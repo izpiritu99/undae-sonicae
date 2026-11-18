@@ -544,6 +544,96 @@ public:
     }
 };
 
+// Note lengths in quarter notes for the tempo-synced effects ("free" = 0: use milliseconds instead).
+inline double noteBeats(const std::string& s) {
+    static const std::pair<const char*, double> t[] = { { "1/64", 1.0 / 16 }, { "1/32", 0.125 }, { "1/16", 0.25 }, { "1/8 triplet", 1.0 / 3 }, { "1/8", 0.5 }, { "1/8 dotted", 0.75 },
+        { "1/4 triplet", 2.0 / 3 }, { "1/4", 1 }, { "1/4 dotted", 1.5 }, { "1/2", 2 }, { "1 bar", 4 } };
+    for (auto& [k, v] : t) if (s == k) return v;
+    return 0;
+}
+
+// Tempo delay: time free (ms) or a note length at the project tempo, stereo or ping-pong, the right side offset by
+// `spread`, high- and low-pass and soft saturation inside the feedback loop, wow / flutter on the read position, and
+// the echoes ducked while the dry signal is loud. Time changes glide (like a tape machine's speed) instead of clicking.
+class EchoLine : public Effect {
+    DelayLine dl, dr; Biquad2 hp, lp; WetDry m; std::string sync = "1/8", mode = "stereo";
+    double ms = 375, spread = 0, fb = 0.45, lo = -1, hi = -1, drive = 0, wow = 0, duck = 0, curL = -1, curR = -1, ph1 = 0, ph2 = 0, env = 0; size_t cap = 0;
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); cap = (size_t)(4.2 * s); dl.init(cap); dr.init(cap); hp.setType(FilterType::Highpass); lp.setType(FilterType::Lowpass); lo = hi = -1; curL = curR = -1; }
+    void set(const FxSlot& f) override {
+        sync = f.str("sync", "1/8"); mode = f.str("mode", "stereo"); ms = f.num("time", 375); spread = f.num("spread", 0); fb = f.num("fb", 0.45);
+        drive = f.num("drive", 0); wow = f.num("wow", 0); duck = f.num("duck", 0); m.mix(f.num("mix", 0.3));
+        const double l = f.num("lo", 120), h = f.num("hi", 6000);
+        if (l != lo || h != hi) { lo = l; hi = h; hp.set(sr, lo, Q_BW2, 0); lp.set(sr, hi, Q_BW2, 0); }
+    }
+    double timeSec() const { const double nb = noteBeats(sync); return nb > 0 ? nb * 60 / std::max(20.0, bpm) : ms / 1000; }
+    void process(float* L, float* R, int n) override {
+        juce::ScopedNoDenormals nd;
+        const double maxD = (double)cap - 0.06 * sr - 4;
+        const double tl = clampd(timeSec() * sr, 16, maxD), tr = clampd(tl * (1 + spread), 16, maxD);
+        if (curL < 0) { curL = tl; curR = tr; }
+        const double gk = 1 - std::exp(-1 / (0.08 * sr)), ea = std::exp(-1 / (0.005 * sr)), er = std::exp(-1 / (0.25 * sr));
+        const bool pp = mode == "ping-pong"; const double dg = 1 + drive * 4;
+        for (int i = 0; i < n; i++) {
+            curL += (tl - curL) * gk; curR += (tr - curR) * gk;
+            ph1 += 0.55 / sr; ph1 -= std::floor(ph1); ph2 += 6.3 / sr; ph2 -= std::floor(ph2);
+            const double wobble = wow * (0.004 * sr * std::sin(2 * PI * ph1) + 0.0006 * sr * std::sin(2 * PI * ph2));
+            float yl = dl.read(std::max(2.0, curL + wobble)), yr = dr.read(std::max(2.0, curR + wobble));
+            float fl = yl, fr = yr; hp.tick(fl, fr); lp.tick(fl, fr);
+            if (drive > 0) { fl = (float)(std::tanh(fl * dg) / dg); fr = (float)(std::tanh(fr * dg) / dg); }
+            if (pp) { dl.push((float)(0.5 * (L[i] + R[i]) + fb * fr)); dr.push((float)(fb * fl)); }
+            else { dl.push((float)(L[i] + fb * fl)); dr.push((float)(R[i] + fb * fr)); }
+            const double x = std::max(std::abs(L[i]), std::abs(R[i])); env = x > env ? ea * env + (1 - ea) * x : er * env + (1 - er) * x;
+            const double wg = m.wet * (1 - duck * std::min(1.0, env * 2));
+            L[i] = (float)(L[i] * m.dry + yl * wg); R[i] = (float)(R[i] * m.dry + yr * wg);
+        }
+    }
+};
+
+// Glitch: on every `grid` step of the song (or of its own clock when stopped) a seeded random choice, the same on
+// every play and export, picks pass / repeat (loop the last `slice` before the step) / reverse (play the previous step
+// backwards) / tape stop (the read speed falls to zero across the step) / gate (slices chopped on and off). 2 ms fades
+// at every cut.
+class Glitch : public Effect {
+    std::vector<float> bl, br; size_t W = 0, wp = 0; WetDry m;
+    double grid = 0.5, slice = 0.125, pRep = 0.3, pRev = 0.15, pStop = 0.1, pGate = 0.1, own = 0; uint64_t seed = 1;
+    int64_t step = INT64_MIN; int act = 0; double stepStart = 0, readPos = 0;
+    static double hash(uint64_t s, int64_t k) { uint64_t z = s * 0x9E3779B97F4A7C15ull + (uint64_t)k * 0xBF58476D1CE4E5B9ull; z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull; z = (z ^ (z >> 27)) * 0x94D049BB133111EBull; z ^= z >> 31; return (double)(z >> 11) / 9007199254740992.0; }
+    inline float rd(const std::vector<float>& b, double p) const { while (p < 0) p += (double)W; const size_t i = (size_t)p % W; const double f = p - std::floor(p); return (float)(b[i] * (1 - f) + b[(i + 1) % W] * f); }
+public:
+    void prepare(double s, int b) override { Effect::prepare(s, b); W = (size_t)(8.5 * s); bl.assign(W, 0.f); br.assign(W, 0.f); wp = 0; step = INT64_MIN; }
+    void set(const FxSlot& f) override {
+        grid = std::max(0.0625, noteBeats(f.str("grid", "1/8"))); slice = std::max(1.0 / 64, noteBeats(f.str("slice", "1/32")));
+        pRep = f.num("repeat", 0.3); pRev = f.num("reverse", 0.15); pStop = f.num("stop", 0.1); pGate = f.num("gate", 0.1); seed = (uint64_t)std::lround(f.num("seed", 1)); m.mix(f.num("mix", 1));
+    }
+    void process(float* L, float* R, int n) override {
+        const double spb = 60.0 / std::max(20.0, bpm) * sr;   // samples per beat
+        double pos = beat >= 0 ? beat : own;                 // beats
+        const double stepS = grid * spb, sliceS = std::min(slice * spb, stepS), fade = 0.002 * sr;
+        for (int i = 0; i < n; i++, pos += 1 / spb) {
+            bl[wp] = L[i]; br[wp] = R[i];
+            const int64_t k = (int64_t)std::floor(pos / grid + 1e-9);
+            const double off = (pos - (double)k * grid) * spb;   // samples into this step
+            if (k != step) {
+                step = k; stepStart = (double)wp - off;
+                const double u = hash(seed, k); double c = 0; act = 0;
+                if (u < (c += pRep)) act = 1; else if (u < (c += pRev)) act = 2; else if (u < (c += pStop)) act = 3; else if (u < (c += pGate)) act = 4;
+                readPos = stepStart;
+            }
+            float yl = L[i], yr = R[i]; double g = 1;
+            if (act == 1) { const double j = std::fmod(off, sliceS); const double p = stepStart - sliceS + j; yl = rd(bl, p); yr = rd(br, p); g = std::min({ 1.0, j / fade, (sliceS - j) / fade }); }
+            else if (act == 2) { const double p = stepStart - 1 - off; yl = rd(bl, p); yr = rd(br, p); g = std::min({ 1.0, off / fade, (stepS - off) / fade }); }
+            else if (act == 3) { const double sp = std::max(0.0, 1 - off / stepS); readPos += sp * sp; yl = rd(bl, readPos); yr = rd(br, readPos); g = std::min(1.0, (stepS - off) / fade); }
+            else if (act == 4) { const double j = std::fmod(off, sliceS); g = j < sliceS * 0.5 ? std::min({ 1.0, j / fade, (sliceS * 0.5 - j) / fade }) : 0; }
+            g = std::max(0.0, g);
+            if (act) { yl = (float)(yl * g); yr = (float)(yr * g); }
+            L[i] = (float)(L[i] * m.dry + yl * m.wet); R[i] = (float)(R[i] * m.dry + yr * m.wet);
+            wp = (wp + 1) % W;
+        }
+        own = pos;
+    }
+};
+
 class PassThrough : public Effect {
 public:
     void set(const FxSlot&) override {}
@@ -571,6 +661,8 @@ std::unique_ptr<Effect> makeEffect(const std::string& t) {
     if (t == "gate") return std::make_unique<Gate>();
     if (t == "trans") return std::make_unique<Transient>();
     if (t == "imager") return std::make_unique<Imager>();
+    if (t == "echo") return std::make_unique<EchoLine>();
+    if (t == "glitch") return std::make_unique<Glitch>();
     return std::make_unique<PassThrough>();   // plug-ins, until hosting is ported
 }
 
