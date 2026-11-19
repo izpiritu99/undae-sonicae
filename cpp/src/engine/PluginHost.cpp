@@ -28,9 +28,16 @@ static void closeSock(std::intptr_t s) { closesocket((SOCKET)s); }
 static void shutSock(std::intptr_t s) { shutdown((SOCKET)s, SD_BOTH); }
 static void setTimeout(std::intptr_t s, int opt, int sec) { DWORD ms = (DWORD)sec * 1000; setsockopt((SOCKET)s, SOL_SOCKET, opt, (const char*)&ms, sizeof ms); }
 static void netInit() { static const bool ok = [] { WSADATA w; return WSAStartup(MAKEWORD(2, 2), &w) == 0; }(); (void)ok; }
+static void noSigPipe(std::intptr_t) {}
 #else
 using SockT = int;
+#if defined(__APPLE__)
+static constexpr int kSendFlags = 0;   // macOS has no MSG_NOSIGNAL: the socket gets SO_NOSIGPIPE instead (noSigPipe)
+static void noSigPipe(std::intptr_t s) { int one = 1; setsockopt((int)s, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one); }
+#else
 static constexpr int kSendFlags = MSG_NOSIGNAL;
+static void noSigPipe(std::intptr_t) {}
+#endif
 static void closeSock(std::intptr_t s) { close((int)s); }
 static void shutSock(std::intptr_t s) { shutdown((int)s, SHUT_RDWR); }
 static void setTimeout(std::intptr_t s, int opt, int sec) { timeval tv{ sec, 0 }; setsockopt((int)s, SOL_SOCKET, opt, &tv, sizeof tv); }
@@ -218,7 +225,7 @@ static std::intptr_t dial(const std::string& host, int port) {   // TCP to host:
     if (s < 0) { freeaddrinfo(res); return -1; }
 #endif
     const std::intptr_t fd = (std::intptr_t)s;
-    setTimeout(fd, SO_SNDTIMEO, 5);
+    noSigPipe(fd); setTimeout(fd, SO_SNDTIMEO, 5);
     if (::connect(s, res->ai_addr, (int)res->ai_addrlen)) { closeSock(fd); freeaddrinfo(res); return -1; }
     freeaddrinfo(res); return fd;
 }

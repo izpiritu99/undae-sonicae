@@ -21,6 +21,15 @@ static void* openLame() {
     return nullptr;
 }
 static void* lameSym(void* h, const char* s) { return (void*)GetProcAddress((HMODULE)h, s); }
+#elif defined(__APPLE__)
+// inside the app bundle (Contents/Frameworks) first, then Homebrew on Apple Silicon and on Intel
+static void* openLame() {
+    const auto fw = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getSiblingFile("Frameworks");
+    for (auto n : { fw.getChildFile("libmp3lame.0.dylib").getFullPathName(), fw.getChildFile("libmp3lame.dylib").getFullPathName(),
+                    juce::String("/opt/homebrew/lib/libmp3lame.0.dylib"), juce::String("/usr/local/lib/libmp3lame.0.dylib"), juce::String("libmp3lame.0.dylib"), juce::String("libmp3lame.dylib") })
+        if (void* h = dlopen(n.toRawUTF8(), RTLD_NOW | RTLD_LOCAL)) return h;
+    return nullptr;
+}
 #else
 static void* openLame() { for (const char* n : { "libmp3lame.so.0", "libmp3lame.so" }) if (void* h = dlopen(n, RTLD_NOW | RTLD_LOCAL)) return h; return nullptr; }
 static void* lameSym(void* h, const char* s) { return dlsym(h, s); }

@@ -4,6 +4,7 @@
 /builds/
 /cpp/build/
 /cpp/build-*/
+/cpp/dist/
 /cpp/*.log
 /cpp/Builds/Android/build/
 /cpp/Builds/Android/app/build/

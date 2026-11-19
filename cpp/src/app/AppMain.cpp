@@ -34,6 +34,11 @@
 #include <tlhelp32.h>
 #include <psapi.h>
 #endif
+#if JUCE_MAC
+#include <libproc.h>
+#include <mach/mach_time.h>
+#include <unistd.h>
+#endif
 
 namespace ui {
 
@@ -79,6 +84,21 @@ struct Load {
             PROCESS_MEMORY_COUNTERS pm{}; if (GetProcessMemoryInfo(h, &pm, sizeof pm)) bytes += (double)pm.WorkingSetSize;
             CloseHandle(h);
         }
+        const double now = juce::Time::getMillisecondCounterHiRes() / 1000.0, cores = std::max(1, juce::SystemStats::getNumCpus());
+        if (lastT > 0 && now > lastT) cpu = juce::jlimit(0.0, 100.0, (ticks - lastTicks) / 1e7 / (now - lastT) / cores * 100);
+        lastT = now; lastTicks = ticks; ramMB = bytes / 1048576.0;
+#elif JUCE_MAC
+        // the app and the processes it started: CPU time from proc_pidinfo (Mach time units: on Apple Silicon these are
+        // not nanoseconds, so mach_timebase_info converts), resident memory in bytes
+        std::vector<pid_t> tree{ getpid() };
+        for (size_t i = 0; i < tree.size() && tree.size() < 256; i++) {
+            pid_t kids[64]; const int n = proc_listchildpids(tree[i], kids, (int)sizeof kids);
+            for (int k = 0; k < n && k < 64; k++) if (kids[k] > 0) tree.push_back(kids[k]);
+        }
+        static const double nsPerTick = [] { mach_timebase_info_data_t tb{}; mach_timebase_info(&tb); return tb.denom ? (double)tb.numer / tb.denom : 1.0; }();
+        double cpuNs = 0, bytes = 0;
+        for (pid_t pid : tree) { proc_taskinfo ti{}; if (proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &ti, (int)sizeof ti) == (int)sizeof ti) { cpuNs += (double)(ti.pti_total_user + ti.pti_total_system) * nsPerTick; bytes += (double)ti.pti_resident_size; } }
+        const long long ticks = (long long)(cpuNs / 100);   // 100 ns units, like the Windows branch
         const double now = juce::Time::getMillisecondCounterHiRes() / 1000.0, cores = std::max(1, juce::SystemStats::getNumCpus());
         if (lastT > 0 && now > lastT) cpu = juce::jlimit(0.0, 100.0, (ticks - lastTicks) / 1e7 / (now - lastT) / cores * 100);
         lastT = now; lastTicks = ticks; ramMB = bytes / 1048576.0;

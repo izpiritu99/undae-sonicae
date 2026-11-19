@@ -191,6 +191,8 @@ private:
             "Needs libmp3lame.dll next to Undae Sonicae.exe"
            #elif JUCE_ANDROID
             "MP3 export is not available on Android yet"
+           #elif JUCE_MAC
+            "Needs LAME: brew install lame"
            #else
             "Needs LAME: sudo apt install libmp3lame0"
            #endif

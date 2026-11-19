@@ -1,6 +1,8 @@
 # Undae Sonicae, native edition (C++ / JUCE). Build:
 #   cmake -S cpp -B cpp/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build cpp/build
 cmake_minimum_required(VERSION 3.22)
+# macOS: runs on 11 (Big Sur) and later; cpp/build-mac.sh builds one universal app (Apple Silicon + Intel).
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Oldest macOS the app runs on")
 project(UndaeSonicae VERSION 0.3.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,12 +42,22 @@ juce_add_console_app(undae-render PRODUCT_NAME "undae-render")
 target_sources(undae-render PRIVATE src/render/RenderMain.cpp)
 target_link_libraries(undae-render PRIVATE us_engine juce::juce_recommended_config_flags)
 
+set(US_APPLE_OPTS)
+if(APPLE)   # macOS asks before any app may use the microphone or an audio interface's inputs; without this text it refuses
+  set(US_APPLE_OPTS
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "Undae Sonicae records from your microphone or audio interface when you arm recording."
+    HARDENED_RUNTIME_ENABLED TRUE
+    # library validation off so a Homebrew libmp3lame (not signed by us) can load for MP3 export
+    HARDENED_RUNTIME_OPTIONS com.apple.security.device.audio-input com.apple.security.cs.disable-library-validation)
+endif()
 juce_add_gui_app(UndaeSonicae
   PRODUCT_NAME "Undae Sonicae"
   COMPANY_NAME "Undae Sonicae"
   BUNDLE_ID "app.undaesonicae.native"
   ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/../app/icons/icon-512.png"
-  ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/../app/icons/icon-64.png")
+  ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/../app/icons/icon-64.png"
+  ${US_APPLE_OPTS})
 target_sources(UndaeSonicae PRIVATE src/app/AppMain.cpp src/app/Doc.cpp)
 target_include_directories(UndaeSonicae PRIVATE src/app)
 target_link_libraries(UndaeSonicae PRIVATE us_engine juce::juce_gui_extra juce::juce_audio_utils juce::juce_audio_devices

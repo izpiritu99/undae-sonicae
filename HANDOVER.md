@@ -1106,3 +1106,64 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    from now on, and push the result back to wherever the canonical copy lives.
 8. **Anything else added on Windows**: each later Windows change that touches platform code (`PluginHost.cpp`,
    `Mp3.cpp`, `AppMain.cpp` CPU / RAM readout, CMake) gets a line here.
+9. **macOS preparation (2026-11-19)**: `PluginHost.cpp` gained `noSigPipe()` (a no-op on Linux, which keeps
+   `MSG_NOSIGNAL`), `Mp3.cpp` and `AppMain.cpp` gained `__APPLE__` / `JUCE_MAC` branches, and `cpp/CMakeLists.txt` sets
+   `CMAKE_OSX_DEPLOYMENT_TARGET` (ignored off Apple) and Apple-only `juce_add_gui_app` options. The Linux build should
+   be unaffected; confirm with the self-test.
+
+## Native edition on macOS (plan, 2026-11-19)
+
+The owner wants a Mac version with the same interface, features and behaviour as the Windows one. JUCE is
+cross-platform and the interface is drawn by the app itself (no native widgets), so the look carries over unchanged;
+the work is in the few platform-specific pieces and in packaging. A Mac app can only be built on a Mac (Apple's SDK and
+licence), so nothing below has been compiled yet: the code was written on Windows, and the Windows build and self-test
+still pass with it.
+
+### Done in the code (2026-11-19, not yet compiled on a Mac)
+
+- `cpp/build-mac.sh`: configures a universal build (arm64 + x86_64) in `cpp/build-mac`, builds, runs the self-test,
+  signs ad hoc (`codesign -s -`: Apple Silicon refuses unsigned code), and packs `cpp/dist/Undae-Sonicae-0.3.0-mac.dmg`
+  with an Applications link.
+- `cpp/CMakeLists.txt`: macOS 11 or later; on Apple, the microphone permission text (without it macOS silently gives
+  the app no audio input), and the hardened runtime with `audio-input` and `disable-library-validation` (so a Homebrew
+  LAME can load).
+- `PluginHost.cpp`: macOS has no `MSG_NOSIGNAL`; sockets get `SO_NOSIGPIPE` instead. `findBinDir` already walks up
+  out of `Undae Sonicae.app/Contents/MacOS`.
+- `Mp3.cpp`: LAME from `Contents/Frameworks` in the bundle, then Homebrew (`/opt/homebrew/lib`, `/usr/local/lib`).
+- `AppMain.cpp`: CPU / RAM readout through `proc_listchildpids` and `proc_pidinfo(PROC_PIDTASKINFO)`; CPU times are in
+  Mach units on Apple Silicon, converted with `mach_timebase_info`.
+- Settings texts: Core Audio wording was already there; the MP3 hint says `brew install lame`; the plug-in menu says
+  plug-in hosting on macOS is not built yet.
+- Shortcuts already take ⌘ wherever they take Ctrl (`isCtrlDown() || isCommandDown()`), so ⌘Z, ⌘S and so on work.
+
+### Steps on a Mac
+
+1. **Set up**: Xcode command line tools (`xcode-select --install`), Homebrew, `brew install cmake ninja lame`. Copy the
+   project to the Mac's own disk and unzip `JUCE-8.0.15-patched.zip` into `cpp/third_party` (as on Windows).
+2. **Build**: `cpp/build-mac.sh`. Fix whatever clang on macOS reports. The new `JUCE_MAC` / `__APPLE__` branches above
+   are the likeliest spots, since they were never compiled.
+3. **Check**, as on Windows: the self-test ends with "all passed"; `undae-render` of First Light matches a Windows render
+   in `undae-compare`; `"Undae Sonicae.app/Contents/MacOS/Undae Sonicae" cpp/examples/first-light.undae.json --play
+   --quit-after 8` reports clean audio callbacks; `--snapshot` matches the Windows layout. Then by hand: Settings ›
+   Audio lists Core Audio devices, recording asks for the microphone once, a background photo and Deck transparency work,
+   and the Retina display is sharp (JUCE scales by itself).
+4. **Plug-ins on macOS** (the largest piece). The Windows / Linux hosts do not carry over: `native/win/vsthost.c` is
+   Win32-only and `native/host.c` is X11. Plan: a new out-of-process host, `undae-machost`, a small JUCE console app
+   using `juce_audio_processors` (Audio Units and VST3, `juce::AudioPluginFormatManager`) that speaks the existing
+   WebSocket protocol in `native/PROTOCOL.md`. The app side (`PluginHost.cpp`) then needs only a `JUCE_MAC` branch in
+   `HostSet::start` to spawn it. Separate processes keep a crashing plug-in from taking the app down, as now. Plug-in
+   editor windows open from the host process (JUCE's `AudioProcessorEditor` in a `DocumentWindow`). Scan
+   `/Library/Audio/Plug-Ins/{Components,VST3}` and `~/Library/Audio/Plug-Ins/...`. The same host could later replace the
+   Wine / X11 hosts elsewhere (Phase 4 of the native plan). CLAP: port `host.c` (dlopen works on macOS; replace
+   `eventfd` with a pipe and the X11 windows with Cocoa) or add CLAP to `undae-machost` with the clap-juce-extensions.
+   Until this exists, plug-in slots pass audio through and another computer's shared plug-ins work over Wi-Fi.
+5. **Mac polish** (same features, Mac manners):
+   - Shortcut labels: show ⌘ instead of "Ctrl" on macOS (`Keys.h` builds the "Ctrl+" text).
+   - A Mac menu bar (`juce::MenuBarModel::setMacMainMenu`) with About, Settings… (⌘,) and Quit (⌘Q).
+   - Trackpad pinch to zoom the piano roll and song (`mouseMagnify`).
+   - Opening `.undae.json` from Finder: a custom document type in the Info.plist (`PLIST_TO_MERGE`); a plain `json`
+     extension would claim every JSON file.
+6. **Distribution**: for other people's Macs without the right-click → Open step, the app needs a Developer ID
+   signature (Apple Developer Program, yearly fee) and notarisation (`xcrun notarytool submit … --wait`, then
+   `xcrun stapler staple`). Ship LAME as `Contents/Frameworks/libmp3lame.0.dylib` (LGPL, dynamically loaded, as on
+   Windows).
