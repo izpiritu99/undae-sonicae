@@ -1,75 +1,105 @@
 # Undae Sonicae
 
-A pattern-based DAW for Linux and Android built on one Web Audio codebase (`app/`), wrapped by Electron for
-Linux and Capacitor for Android. No build step: `app/` is plain ES modules.
+A pattern-based DAW: a step-sequencer rack, piano roll, song arranger and mixer, with its own synth, sampler and more
+than forty built-in effects, plus VST2, VST3 and Audio Unit plug-ins on the desktop. It runs on Windows, macOS, Linux and
+Android, and every edition opens the same project files (`.undae.json`).
 
-## Run it
+There are two editions in this repository:
+
+| Edition | Where | Status |
+| --- | --- | --- |
+| **Native** (C++ / JUCE) | `cpp/` | The main edition, being developed. Windows, macOS, Linux, Android. |
+| Web (JavaScript, Web Audio) | `app/`, wrapped by Electron (`desktop/`) and Capacitor (`android/`) | The original. Kept working, but newer features are native-only. |
+
+## Get it running
+
+### Native edition
+
+| Platform | How | Needs |
+| --- | --- | --- |
+| Windows | `cpp\build-win.bat` → `cpp\build\UndaeSonicae_artefacts\Release\Undae Sonicae.exe` | Visual Studio 2022 or its Build Tools ("Desktop development with C++") |
+| macOS | `cpp/build-mac.sh` → `cpp/dist/Undae-Sonicae-0.3.0-mac.dmg` (universal: Apple Silicon and Intel, macOS 11+) | Xcode command line tools, `brew install cmake ninja lame` |
+| macOS without a Mac | Push to GitHub: `.github/workflows/mac.yml` builds, tests and uploads the `.dmg` on an Intel Mac | A GitHub repository |
+| Linux | `cmake -S cpp -B cpp/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build cpp/build`; `sh cpp/package.sh` makes a `.deb` and an AppImage | gcc or clang, CMake, Ninja, JUCE's Linux packages |
+| Android | Projucer writes `cpp/Builds/Android` from `cpp/UndaeSonicae.jucer`, then `gradlew assembleRelease` | Android Studio (SDK, NDK, JDK) |
+
+Every build needs JUCE 8.0.15 with the project's patch in `cpp/third_party/JUCE`: it is not in the repository. Clone the
+`8.0.15` tag there and apply `cpp/patches/juce-android.patch`, or unzip the patched copy if you have one. Details, and
+the command-line tools (`undae-render`, `undae-selftest`, `undae-plugtest`, …), are in [cpp/README.md](cpp/README.md).
+
+Opening a Mac build on another Mac: it is signed ad hoc, not notarised, so macOS blocks it the first time. Open
+**System Settings › Privacy & Security** and click **Open Anyway** once.
+
+### Web edition
 
 | Target | Command | Needs |
 | --- | --- | --- |
-| Browser (any OS) | `npm start` then open http://localhost:5173 | Node 18+ |
-| Linux desktop (dev) | `npm install` then `npm run desktop` | Node 18+ |
-| Linux AppImage + .deb | `npm run dist:linux` (run on Linux or WSL) → `dist/` | Node 18+ |
-| Android APK | `npm install`, `npm run android:init` (once), `npm run android:apk` → `android/app/build/outputs/apk/debug/` | Node 18+, JDK 17+, Android SDK |
-| Android without building | Host `app/` over HTTPS, open in Chrome, "Add to Home screen" (installable PWA, works offline) | – |
+| Browser | `npm start`, then open http://localhost:5173 | Node 18+ |
+| Linux desktop (Electron) | `npm install`, then `npm run desktop`; `npm run dist:linux` makes an AppImage and a `.deb` | Node 18+ |
+| Android (Capacitor) | `npm install`, `npm run android:init` (once), `npm run android:apk` | Node 18+, JDK 17+, Android SDK |
 
-After changing files in `app/`, run `npm run android:sync` before rebuilding the APK.
+`app/` is plain ES modules with no build step. After changing it, run `npm run android:sync` before rebuilding the APK.
 
-The Electron and Capacitor wrappers were written but **not built or run on the authoring machine** (no Node or
-Android SDK there). The app itself was tested in Chromium.
+## What's in it (native edition)
 
-## What's in it
-
-- **Rack** – channel rack / step sequencer: per-channel level, pan, mute, solo, colour; global swing; per-step
-  velocity (right-click a step); fill, Euclidean, shift and randomise tools; 1–64 bar patterns.
-  Each channel has a bus box (M, 1..n, A/B) that routes it to a mixer bus; swing works on a 1/16 or 1/8 grid.
-- **Piano Roll** – draw / select / slice / erase / pan tools, velocity lane, snap (incl. triplets), scale
-  highlight + scale lock, ghost notes, quantize (hard, soft, lengths), legato, chop, arpeggiate, strum, humanize,
-  reverse, copy/paste/duplicate, key detection from notes.
-- **Song** – arrange pattern clips on tracks; PAT / SONG switch in the transport.
-- **Mixer** – master, insert and two send buses: level, pan, mute, solo, polarity invert, mono, stereo width,
-  sends, peak meters, and an FX chain per bus where each slot can be bypassed, reordered or removed
-  (EQ, filter, compressor, limiter, reverb, delay, chorus, phaser, distortion, bitcrush).
-- **Instrument** – *Synth*: 3 oscillators, unison, sub, noise, FM, multimode filter with drive, three
-  envelopes, two LFOs, a 6-slot modulation matrix, mono/poly, glide, presets. *Sampler*: any uploaded audio
-  becomes a playable instrument (root note, tune, start, attack/release, hold, reverse, choke groups,
-  automatic root-pitch detection).
-- **Audio Lab** – record the mic or load a file, then: detect key (with Camelot code) and tempo; convert
-  audio to MIDI (melody mode, plus an experimental chord mode); or play any instrument live with your voice.
-- **Library** – synthesised 808-style kit (16 sounds), stock keys and sub, your uploads.
-- **MIDI** – USB/Bluetooth keyboards via Web MIDI (notes, pitch bend, mod wheel, sustain), live record into
-  the pattern with optional quantize, `.mid` import/export. On-screen and typing keyboards.
-- **Project** – undo/redo, autosave, project files with embedded samples, WAV export (offline render).
-- **Settings** – 8 themes, custom accent, corner radius, UI scale, density, step shape, note colouring,
-  grid contrast, deck layout, latency / look-ahead / polyphony / meter rate.
-
-## Added since the first version
-
-- Free mixer routing: sends from any bus to any bus, optional master link, add insert or send buses, bus presets, dB peak readouts.
-- Peak controller (ducking), whole-signal or one frequency band, triggered by another bus.
-- Automation lanes for bus and channel level / pan: draw them in the Song view or record fader moves.
-- Record dialog (notes, microphone audio, automation, loop record); time shown as B:S:T or M:S:CS.
-- Rack row views (steps, notes, waveform), pattern length in beats, split a pattern by channel.
-- Sample folders in the Library, drag and drop onto the Rack and Song tracks, Sound Design view.
-- Rebindable hotkeys (Settings > Hotkeys).
+- **Rack**: channel rack and step sequencer, per-step velocity, swing, fill / Euclidean / shift / randomise, pattern
+  lengths in beats, row views (steps, notes, waveform).
+- **Piano Roll**: draw, select, slice, erase and more; velocity lane; snap with triplets; scale highlight and lock;
+  ghost notes; quantise, legato, chop, arpeggiate, strum, humanise; slides; loops.
+- **Song**: pattern and audio clips on tracks, automation lanes (draw them or record fader moves).
+- **Mixer**: master, insert and send buses with free routing, side chains and the peak controller (ducking);
+  per-bus effect chains with bypass and reordering, effect categories and ready-made chains (vocal strip, drum bus,
+  mastering and more).
+- **Built-in effects**: EQ, parametric and dynamic EQ, filter, auto-filter, compressor, multiband, limiter, gate,
+  transient shaper, de-esser, saturator, distortion, amp, lo-fi, bitcrush, reverb, Vault (FDN) reverb, IR reverb,
+  delays (plain, tempo, multi-tap), chorus, ensemble, phaser, flanger, rotary speaker, auto-pan, trance gate, ring mod,
+  frequency shifter, pitch shifter, pitch correction, doubler, vocoder, glitch, scratch, spectral gate, sub enhancer,
+  stereo width, utility, test tone, and meters (spectrum, scope, tuner, LUFS, true peak).
+- **Instruments**: a synth with three oscillators, wavetables, physical models (plucked string, struck bar / glass /
+  bell), filters, envelopes, LFOs and a mod matrix, and 40+ original presets; a sampler with granular mode, multi-sample
+  zones (round robin), a beat slicer and choke groups; an arpeggiator / step sequencer on any instrument.
+- **Plug-ins**: VST2 and VST3 on Windows and Linux, Audio Units, VST3 and VST2 on macOS (see Known limits). Each runs
+  in a separate host process, so a crashing plug-in cannot take a song down. On Android, Settings › Plug-in server
+  uses a computer's plug-ins over Wi-Fi.
+- **Sound Design**: build one-shot sounds and send them to the rack. **Audio Lab**: key, tempo, audio to notes.
+  **Library**: the 808 and Studio kits, stock sounds, your imports.
+- **Recording and MIDI**: audio and MIDI recording, loop record, MIDI keyboards (notes, pitch bend, controllers), an
+  on-screen and a typing keyboard, `.mid` import and export.
+- **Export**: WAV, FLAC, Ogg Vorbis and MP3 (through LAME), at 16 / 24 / 32-bit and 44.1 to 96 kHz.
+- **Workspace**: up to four decks of views, each switchable, and floating decks; 8 themes, custom accent, background
+  photo with dimming and deck transparency, interface size, density; rebindable hotkeys; undo / redo, autosave,
+  backups, project templates.
 
 ## Known limits
 
-- **No VST hosting.** VSTs are native desktop plug-ins; they cannot load in a web runtime and do not exist on
-  Android at all. The mixer's FX slots use the built-in effects instead.
-- Audio-to-MIDI is reliable for one-note-at-a-time sources (voice, bass, lead). Chord mode is a best-effort
-  spectral transcription and will miss or mis-octave notes on dense material.
-- Synth edits apply to the next note played (filter cutoff/resonance also update held notes).
-- No tempo or time-signature automation: one tempo and one signature per project. Recorded takes follow tempo changes with a pitch-preserving stretch (best within about half to double speed).
-- **No ASIO.** ASIO / ASIO4ALL are Windows-only drivers. The app uses the OS audio system (PipeWire, PulseAudio, ALSA or JACK on Linux; AAudio on Android); pick the output device, sample rate and buffer in Settings > Audio.
-- Audio recording needs SONG mode: arm a mixer bus (IN, then the red dot), turn on Rec and press play.
-- Android USB-MIDI through the Capacitor WebView depends on the device's WebView version; the Chrome-installed
-  PWA is the safer route if a keyboard is not detected.
+- **macOS** is new: it builds and passes its tests on GitHub's Intel Mac, but has not yet been tried by a person on a
+  real Mac (sound, recording, plug-in editor windows). Plug-ins that are Intel-only do not load on Apple Silicon Macs
+  yet.
+- **Windows**: MP3 export needs `libmp3lame.dll` next to the app; no CLAP plug-ins yet; no ASIO driver (Windows Audio in
+  Exclusive or Low Latency mode is used for low delay).
+- **Linux**: Windows VST plug-ins run through Wine.
+- Plug-in latency and the pitch correction's latency are not compensated yet, so such a track sits slightly late.
+- Audio to MIDI is reliable for one note at a time (voice, bass, lead); chord mode is best-effort.
+- One tempo and one time signature per project.
+- The web edition lacks the newer native features (most built-in effects, wavetables, granular and zones, the slicer,
+  the arpeggiator). It opens projects that use them, but may drop those settings when it saves.
 
 ## Layout
 
 ```
-app/            the whole application (index.html, css/, js/audio, js/ui)
-desktop/main.js Electron shell
-tools/          static server, Android manifest patch
+cpp/                 native edition (see cpp/README.md)
+  src/engine/        sound engine, project model, plug-in host client
+  src/app/           the app's window and views
+  src/pluginhost/    undae-pluginhost: AU / VST3 / VST2 host (macOS)
+  src/render/        command-line tools: render, compare, self-test, plug-in test
+native/              plug-in hosts for Linux (host.c: CLAP, VST3) and Windows (win/vsthost.c: VST2, VST3), PROTOCOL.md
+app/                 web edition (index.html, css/, js/audio, js/ui)
+desktop/, android/   Electron and Capacitor shells for the web edition
+.github/workflows/   the macOS build on GitHub Actions
+HANDOVER.md          detailed working notes: state, plans, platform specifics
 ```
+
+## License
+
+JUCE is dual-licensed: AGPLv3, or the JUCE 8 licence (a free "Starter" tier below a revenue limit, paid above). Building
+and using it yourself is fine either way; pick one before distributing the native edition.
