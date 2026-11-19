@@ -78,6 +78,8 @@ target_compile_definitions(undae-pluginhost PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_
   JUCE_STANDALONE_APPLICATION=1 JUCE_APPLICATION_NAME_STRING="undae-pluginhost" JUCE_APPLICATION_VERSION_STRING="1")
 if(APPLE)
   target_compile_definitions(undae-pluginhost PRIVATE JUCE_PLUGINHOST_AU=1)
+  # JUCE's Audio Unit hosting uses AUGenericView (for plug-ins without their own editor), which lives in CoreAudioKit
+  target_link_libraries(undae-pluginhost PRIVATE "-framework CoreAudioKit")
 endif()
 target_link_libraries(undae-pluginhost PRIVATE juce::juce_audio_processors juce::juce_gui_basics juce::juce_recommended_config_flags)
 
