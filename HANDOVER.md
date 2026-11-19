@@ -1153,6 +1153,35 @@ deprecated in JUCE 8; an unused `w1 == 0` in `AppMain.cpp` (master meter label);
 Free GitHub minutes for private repositories count Mac time ten times over, so about 13 builds of this size a month:
 batch pushes. Not checked yet on a real Mac: sound, recording, the microphone prompt, Retina sharpness, speed.
 
+### Plug-ins on macOS: undae-pluginhost (2026-11-19)
+
+`cpp/src/pluginhost/HostMain.cpp` (a JUCE GUI app with no Dock icon, `LSUIElement`) speaks `native/PROTOCOL.md`. VST3
+and Audio Units go through JUCE (`addDefaultFormatsToManager`, `JUCE_PLUGINHOST_VST3` / `_AU`); VST2 through
+`Vst2.h`, the interface written out from vsthost.c, because JUCE's VST2 hosting needs Steinberg's withdrawn SDK headers
+(`pluginterfaces/vst2.x/aeffect.h`). Each connection's thread is that instance's audio thread; load / scan / state /
+windows run on the message thread; a global `std::shared_mutex` keeps loading and unloading away from processing.
+State is "J" + JUCE's state, or vsthost's "C" / "P" for VST2. Parameter changes the app made are not echoed back
+(Audio Units report host changes to listeners). Libraries are never unloaded. Panic sends all-notes-off on every channel
+and resets the plug-in (no reload, unlike vsthost).
+
+App side: `HostSet::startJuceHost` on macOS (and wherever `UNDAE_PLUGIN_HOST=juce`) spawns it into the `clapP` slot,
+and `isWindowsSlot` sends every slot there. `build-mac.sh` copies it to `Undae Sonicae.app/Contents/Helpers`; the app
+also finds it under `cpp/build*/undae-pluginhost_artefacts/<config>/` during development. The hardened runtime was
+taken off (ad hoc signing; its library validation would refuse other companies' plug-ins). Needs `-framework
+CoreAudioKit` (AUGenericView).
+
+Checks:
+- Windows, through the same host (`UNDAE_PLUGIN_HOST=juce`): PG-8X and MJUCjr (VST2), Graillon 2 and Vocal Doubler
+  (VST3) pass `undae-plugtest` with the same peaks as vsthost; state read / restore, editor windows and stdin shutdown
+  work.
+- macOS, GitHub run 44624470472 (Intel runner): Surge XT 1.3.4 installed from its release; `undae-plugtest` passes
+  Surge XT as AU (775 parameters) and VST3 (2855), and Surge XT Effects VST3; Apple's own AUs are found; 0 missed blocks,
+  about 0.45 ms per round trip (one 11.9 ms first-block spike on the AU).
+
+Not checked yet (needs a person at a Mac): plug-in editor windows, a real VST2 `.vst` bundle, the user's own plug-ins.
+Not done: Intel-only plug-ins on Apple Silicon (a second, x86_64 host under Rosetta, like the 32-bit host on Windows);
+CLAP on macOS.
+
 ### Steps on a Mac
 
 1. **Set up**: Xcode command line tools (`xcode-select --install`), Homebrew, `brew install cmake ninja lame`. Copy the
