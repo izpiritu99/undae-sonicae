@@ -34,8 +34,9 @@ int main(int argc, char** argv) {
     if (argc > 1 && juce::String(argv[1]) == "--scan-json") { juce::Array<juce::var> a; for (auto& p : list) a.add(p); std::cout << juce::JSON::toString(a, true) << "\n"; us::HostSet::get().stop(); return 0; }
     for (auto& p : list) std::cout << "  found: " << p.getProperty("name", "").toString() << " [" << p.getProperty("format", "").toString() << ((bool)p.getProperty("instrument", false) ? ", instrument" : "") << ((bool)p.getProperty("windows", false) ? ", Windows" : "") << ((int)p.getProperty("bits", 64) == 32 ? " 32-bit" : "") << "]\n";
     int fails = 0;
-    auto tryOne = [&](const juce::String& want, int instWanted) {   // instWanted -1: as the scan says
-        juce::var slot; for (auto& p : list) if (p.getProperty("name", "").toString() == want) slot = p;
+    auto tryOne = [&](const juce::String& want, int instWanted) {   // instWanted -1: as the scan says; "Name@au" picks a format
+        const auto nm = want.upToFirstOccurrenceOf("@", false, false), fmt = want.fromFirstOccurrenceOf("@", false, false);
+        juce::var slot; for (auto& p : list) if (p.getProperty("name", "").toString() == nm && (fmt.isEmpty() || p.getProperty("format", "").toString() == fmt)) slot = p;
         if (slot.isVoid()) { std::cout << "SKIP  " << want << " not found\n"; return; }
         const bool inst = instWanted < 0 ? (bool)slot.getProperty("instrument", false) : instWanted != 0;
         juce::var s(new juce::DynamicObject()); auto* o = s.getDynamicObject();

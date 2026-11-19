@@ -46,10 +46,9 @@ set(US_APPLE_OPTS)
 if(APPLE)   # macOS asks before any app may use the microphone or an audio interface's inputs; without this text it refuses
   set(US_APPLE_OPTS
     MICROPHONE_PERMISSION_ENABLED TRUE
-    MICROPHONE_PERMISSION_TEXT "Undae Sonicae records from your microphone or audio interface when you arm recording."
-    HARDENED_RUNTIME_ENABLED TRUE
-    # library validation off so a Homebrew libmp3lame (not signed by us) can load for MP3 export
-    HARDENED_RUNTIME_OPTIONS com.apple.security.device.audio-input com.apple.security.cs.disable-library-validation)
+    MICROPHONE_PERMISSION_TEXT "Undae Sonicae records from your microphone or audio interface when you arm recording.")
+  # No hardened runtime: the app is signed ad hoc and not notarised, and the runtime's library validation would stop
+  # the plug-in host from loading other companies' plug-ins. Turn it on (with entitlements) only for notarised releases.
 endif()
 juce_add_gui_app(UndaeSonicae
   PRODUCT_NAME "Undae Sonicae"
@@ -66,6 +65,21 @@ target_compile_definitions(UndaeSonicae PRIVATE JUCE_APPLICATION_NAME_STRING="Un
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_compile_definitions(UndaeSonicae PRIVATE JUCE_JACK=1 JUCE_ALSA=1)
 endif()
+
+# The plug-in host built on JUCE (src/pluginhost): Audio Units, VST3 and VST2. The macOS app ships it in
+# Contents/Helpers; elsewhere it is built for testing (UNDAE_PLUGIN_HOST=juce makes the app use it). No Dock icon on macOS.
+juce_add_gui_app(undae-pluginhost
+  PRODUCT_NAME "undae-pluginhost"
+  COMPANY_NAME "Undae Sonicae"
+  BUNDLE_ID "app.undaesonicae.pluginhost"
+  PLIST_TO_MERGE "<plist><dict><key>LSUIElement</key><true/></dict></plist>")
+target_sources(undae-pluginhost PRIVATE src/pluginhost/HostMain.cpp)
+target_compile_definitions(undae-pluginhost PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_VST=0 JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0
+  JUCE_STANDALONE_APPLICATION=1 JUCE_APPLICATION_NAME_STRING="undae-pluginhost" JUCE_APPLICATION_VERSION_STRING="1")
+if(APPLE)
+  target_compile_definitions(undae-pluginhost PRIVATE JUCE_PLUGINHOST_AU=1)
+endif()
+target_link_libraries(undae-pluginhost PRIVATE juce::juce_audio_processors juce::juce_gui_basics juce::juce_recommended_config_flags)
 
 juce_add_console_app(undae-compare PRODUCT_NAME "undae-compare")
 target_sources(undae-compare PRIVATE src/render/CompareMain.cpp)

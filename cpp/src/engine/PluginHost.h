@@ -32,6 +32,7 @@ public:
     void stop();
     HostEndpoint clap() const; HostEndpoint win(int bits = 64) const;
     bool winPending() const { return pending.load() > 0; }
+    bool juceHost() const { return juceOn.load(); }   // the JUCE host (src/pluginhost) runs: macOS, or UNDAE_PLUGIN_HOST=juce
     // Use another computer's plug-ins (the desktop app's "Share this computer's plug-ins"): "host[:port]" and the pairing
     // code; "" goes back to this computer's hosts. Returns "" or what went wrong; `name` gets the computer's name.
     std::string useServer(const std::string& addr, const std::string& code, std::string* name = nullptr);
@@ -45,6 +46,8 @@ private:
     struct Proc { int pid = -1, in = -1; HostEndpoint ep; };
 #endif
     mutable std::mutex m; Proc clapP, win64, win32; bool remoteOn = false; HostEndpoint rClap, rWin64, rWin32; std::atomic<int> pending{ 0 }; juce::File bin; bool started = false;
+    std::atomic<bool> juceOn{ false };
+    void startJuceHost(const std::string& serial);
     static Proc spawn(const std::string& exe, const std::vector<std::string>& args, const std::vector<std::pair<std::string, std::string>>& env, double timeoutSec);
 };
 

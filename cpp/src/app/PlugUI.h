@@ -39,13 +39,19 @@ inline void choosePlugin(juce::Component* at, bool instruments, std::function<vo
                 shown.push_back(p); m.addItem((int)shown.size(), p.getProperty("name", "").toString() + (p.getProperty("vendor", "").toString().isNotEmpty() ? u8(" · ") + p.getProperty("vendor", "").toString() : juce::String())); }
         };
         group("CLAP", [](auto& p) { return p.getProperty("format", "") == "clap"; });
+        group("Audio Units", [](auto& p) { return p.getProperty("format", "") == "au"; });
+#if JUCE_LINUX
         group("VST3 (Linux)", [](auto& p) { return p.getProperty("format", "") == "vst3" && !(bool)p.getProperty("windows", false); });
+#else
+        group("VST3", [](auto& p) { return p.getProperty("format", "") == "vst3" && !(bool)p.getProperty("windows", false); });
+#endif
+        group("VST2", [](auto& p) { return p.getProperty("format", "") == "vst2" && !(bool)p.getProperty("windows", false); });
         group("Windows VST (through Wine)", [](auto& p) { return (bool)p.getProperty("windows", false) && (int)p.getProperty("bits", 64) != 32; });
         group("Windows VST, 32-bit (through Wine)", [](auto& p) { return (bool)p.getProperty("windows", false) && (int)p.getProperty("bits", 64) == 32; });
 #if JUCE_WINDOWS
         if (shown.empty()) m.addItem(-1, us::HostSet::get().winPending() ? "The plug-in hosts are still starting: try again in a moment" : juce::String("No ") + (instruments ? "instrument" : "effect") + " plug-ins found (Common Files\\VST3, VSTPlugins, and the folders in UNDAE_VST_PATH)", false);
 #elif JUCE_MAC
-        if (shown.empty()) m.addItem(-1, juce::String("No ") + (instruments ? "instrument" : "effect") + " plug-ins: hosting Audio Units and VST3 on macOS is not built yet (another computer's shared plug-ins work)", false);
+        if (shown.empty()) m.addItem(-1, us::HostSet::get().winPending() ? "The plug-in host is still starting: try again in a moment" : juce::String("No ") + (instruments ? "instrument" : "effect") + " plug-ins found (Library › Audio › Plug-Ins: Components, VST3, VST)", false);
 #else
         if (shown.empty()) m.addItem(-1, us::HostSet::get().winPending() ? "Wine is still starting: try again in a moment" : juce::String("No ") + (instruments ? "instrument" : "effect") + " plug-ins found (~/.clap, ~/.vst3, ~/.vst-win)", false);
 #endif

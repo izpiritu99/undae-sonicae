@@ -12,7 +12,7 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Tools
         run: brew install ninja lame
@@ -25,13 +25,27 @@ jobs:
       - name: Build, self-test, sign, pack
         run: cpp/build-mac.sh Release
 
+      - name: A free plug-in to test with (Surge XT, GPL; installs its AU and VST3)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo surge-synthesizer/releases-xt --pattern '*macOS*.dmg' --dir "$RUNNER_TEMP/surge"
+          hdiutil attach -nobrowse -mountpoint "$RUNNER_TEMP/surge-dmg" "$RUNNER_TEMP"/surge/*.dmg
+          sudo installer -pkg "$(find "$RUNNER_TEMP/surge-dmg" -maxdepth 2 -name '*.pkg' | head -n 1)" -target /
+          ls /Library/Audio/Plug-Ins/Components /Library/Audio/Plug-Ins/VST3
+
+      - name: Plug-in test (Surge XT as an Audio Unit and as VST3, through undae-pluginhost)
+        continue-on-error: true
+        run: cpp/build-mac/undae-plugtest_artefacts/Release/undae-plugtest "Surge XT@au" "Surge XT@vst3" "Surge XT Effects@vst3"
+
       - name: Start-up check (screenshot of the demo song)
         continue-on-error: true   # runners have no sound card; the screenshot is what matters here
         run: |
           APP="cpp/build-mac/UndaeSonicae_artefacts/Release/Undae Sonicae.app"
           "$APP/Contents/MacOS/Undae Sonicae" cpp/examples/first-light.undae.json --snapshot "$PWD/cpp/dist/startup.png" --size 1360x860 --quit-after 6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: Undae-Sonicae-mac
           path: |

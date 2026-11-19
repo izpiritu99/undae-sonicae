@@ -27,9 +27,14 @@ else
   echo "LAME not found (brew install lame): MP3 export will need it installed on the Mac"
 fi
 
-# Ad hoc signature: enough for this Mac and, after "Open" from the right-click menu once, for others. Distributing to
-# other people without that step needs a Developer ID signature and notarisation (HANDOVER.md).
-codesign --force --deep --options runtime --sign - "$APP"
+# The plug-in host goes inside the app (Contents/Helpers), where the app looks for it.
+HOST="$B/undae-pluginhost_artefacts/$CONFIG/undae-pluginhost.app"
+rm -rf "$APP/Contents/Helpers/undae-pluginhost.app"; mkdir -p "$APP/Contents/Helpers"; cp -R "$HOST" "$APP/Contents/Helpers/"
+echo "bundled the plug-in host"
+
+# Ad hoc signature: enough for this Mac and, after "Open Anyway" in Privacy & Security once, for others. Distributing
+# to other people without that step needs a Developer ID signature and notarisation (HANDOVER.md).
+codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP" && echo "signed (ad hoc): $APP"
 
 mkdir -p cpp/dist

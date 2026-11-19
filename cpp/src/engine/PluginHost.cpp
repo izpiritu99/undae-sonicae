@@ -141,6 +141,46 @@ HostSet::Proc HostSet::spawn(const std::string& exe, const std::vector<std::stri
 }
 #endif
 
+// --- the JUCE plug-in host (src/pluginhost): the only host on macOS; elsewhere used when UNDAE_PLUGIN_HOST=juce ---------
+static bool wantJuceHost() {
+#if JUCE_MAC
+    return true;
+#else
+    return juce::SystemStats::getEnvironmentVariable("UNDAE_PLUGIN_HOST", "") == "juce";
+#endif
+}
+static juce::File juceHostExe() {
+    const auto exe = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
+#if JUCE_MAC
+    const char* name = "undae-pluginhost.app/Contents/MacOS/undae-pluginhost";
+    { const auto f = exe.getParentDirectory().getSiblingFile("Helpers").getChildFile(name); if (f.existsAsFile()) return f; }   // inside Undae Sonicae.app
+#elif defined(_WIN32)
+    const char* name = "undae-pluginhost.exe";
+#else
+    const char* name = "undae-pluginhost";
+#endif
+    if (exe.getSiblingFile(name).existsAsFile()) return exe.getSiblingFile(name);
+    for (auto d = exe.getParentDirectory(); !d.isRoot() && d.getParentDirectory() != d; d = d.getParentDirectory())   // development: cpp/build*/undae-pluginhost_artefacts/<config>/
+        for (auto cfg : { "Release", "Debug", "RelWithDebInfo" }) { const auto f = d.getChildFile("undae-pluginhost_artefacts").getChildFile(cfg).getChildFile(name); if (f.existsAsFile()) return f; }
+    return {};
+}
+// Folders the JUCE host scans besides the standard ones: UNDAE_PLUGIN_PATH (or UNDAE_VST_PATH), separated by ';'.
+static std::string extraPluginFolders() {
+    auto env = juce::SystemStats::getEnvironmentVariable("UNDAE_PLUGIN_PATH", ""); if (env.isEmpty()) env = juce::SystemStats::getEnvironmentVariable("UNDAE_VST_PATH", "");
+    juce::StringArray dirs; for (auto& f : juce::StringArray::fromTokens(env, ";", "")) if (f.trim().isNotEmpty()) dirs.add(f.trim());
+    return dirs.joinIntoString("\n").toStdString();
+}
+void HostSet::startJuceHost(const std::string& ser) {   // with m held
+    const auto exe = juceHostExe(); if (!exe.existsAsFile()) return;
+    juceOn = true; pending++;
+    std::thread([this, exe, ser] {
+        Proc p = spawn(exe.getFullPathName().toStdString(), { "--child" }, { { "UNDAE_SERIAL", ser } }, 30);
+        p.ep.folder = extraPluginFolders();
+        { std::lock_guard<std::mutex> l(m); clapP = p; }
+        pending--;
+    }).detach();
+}
+
 #if defined(_WIN32)
 // The standard VST folders; the hosts take them as one string, one folder per line (scanPlugins splits it).
 static std::string windowsPluginFolders(int bits) {
@@ -160,6 +200,7 @@ static std::string windowsPluginFolders(int bits) {
 void HostSet::start(const juce::File& binDir, bool serial) {
     std::lock_guard<std::mutex> lk(m); if (started) return; started = true; bin = binDir;
     const std::string ser = serial ? "1" : "0";
+    if (wantJuceHost()) { startJuceHost(ser); return; }   // testing the macOS host on Windows: it takes every plug-in
     clapP.ep.folder = bin.getFullPathName().toStdString();   // no CLAP host on Windows yet; CLAP slots pass audio through
     for (int bits : { 64, 32 }) {   // the VST hosts run directly; the 32-bit one under WoW64
         const juce::File exe = bin.getChildFile(bits == 64 ? "undae-vsthost.exe" : "undae-vsthost32.exe"); if (!exe.existsAsFile()) continue;
@@ -189,6 +230,7 @@ void HostSet::start(const juce::File& binDir, bool serial) {
 #endif
     signal(SIGPIPE, SIG_IGN);   // a host going away must not kill the app
     const std::string ser = serial ? "1" : "0";
+    if (wantJuceHost()) { startJuceHost(ser); return; }   // macOS: Audio Units, VST3 and VST2 all go through this one host
     if (bin.getChildFile("undae-host").existsAsFile()) clapP = spawn(bin.getChildFile("undae-host").getFullPathName().toStdString(), { "--child" }, { { "UNDAE_SERIAL", ser } }, 10);
     clapP.ep.folder = bin.getFullPathName().toStdString();   // bundled test plug-ins live next to the host
     if (system("which wine > /dev/null 2>&1") != 0) return;
@@ -252,6 +294,7 @@ std::string HostSet::useServer(const std::string& addrIn, const std::string& cod
 }
 
 static bool isWindowsSlot(const juce::var& s) {
+    if (HostSet::get().juceHost()) return false;   // the JUCE host takes every format
     const auto fmt = s.getProperty("fmt", "").toString();
     if (fmt == "vst2") return true;
 #if defined(_WIN32)
@@ -401,7 +444,8 @@ std::vector<juce::var> scanPlugins() {
                 std::lock_guard<std::mutex> lk(om); out.push_back(x);
             }
     };
-    std::thread a([&] { run(HostSet::get().clap(), false, 64, 30000); }), b([&] { run(HostSet::get().win(64), true, 64, 120000); }), c([&] { run(HostSet::get().win(32), true, 32, 120000); });
+    // (the JUCE host scans every installed AU / VST3 / VST2, so it gets longer)
+    std::thread a([&] { run(HostSet::get().clap(), false, 64, HostSet::get().juceHost() ? 300000 : 30000); }), b([&] { run(HostSet::get().win(64), true, 64, 120000); }), c([&] { run(HostSet::get().win(32), true, 32, 120000); });
     a.join(); b.join(); c.join();
     return out;
 }
