@@ -1136,6 +1136,23 @@ still pass with it.
   plug-in hosting on macOS is not built yet.
 - Shortcuts already take ⌘ wherever they take Ctrl (`isCtrlDown() || isCommandDown()`), so ⌘Z, ⌘S and so on work.
 
+### Built on GitHub Actions (2026-11-19)
+
+The project is on GitHub (private): `https://github.com/izpiritu99/undae-sonicae`, branch `windows`, remote `origin`.
+`.github/workflows/mac.yml` builds on every push to `windows` / `main` on the `macos-15-intel` runner (the owner's
+tester has an Intel MacBook): JUCE is cloned at 8.0.15 and patched, `cpp/build-mac.sh` builds, self-tests, bundles
+Homebrew's LAME (x86_64 only, so MP3 export works on Intel Macs; Apple Silicon Macs would need an arm64 LAME), signs
+ad hoc and packs the .dmg; then the app opens First Light for a screenshot. Download with
+`gh run download <id> --repo izpiritu99/undae-sonicae`.
+
+First green run: 44613232324 (commit 4819611), 15 minutes. Self-test all passed; the app started on Core Audio (the
+runner's null device) and the screenshot matches the Windows layout; the CPU / RAM readout works. Only one fix was
+needed (`lameSym` in the macOS branch of `Mp3.cpp`). Warnings to tidy some time: `createWriterFor` and `userArea` are
+deprecated in JUCE 8; an unused `w1 == 0` in `AppMain.cpp` (master meter label); `sDec` unused in `Voices.cpp`.
+
+Free GitHub minutes for private repositories count Mac time ten times over, so about 13 builds of this size a month:
+batch pushes. Not checked yet on a real Mac: sound, recording, the microphone prompt, Retina sharpness, speed.
+
 ### Steps on a Mac
 
 1. **Set up**: Xcode command line tools (`xcode-select --install`), Homebrew, `brew install cmake ninja lame`. Copy the
