@@ -34,7 +34,7 @@ public:
         if (isTouch() && getWidth() < 760) { fxView.setBounds(r.removeFromBottom(getHeight() * 45 / 100)); } else fxView.setBounds(r.removeFromRight(fw));
         stripsView.setBounds(r); layoutStrips(); fx.layout();
     }
-    void paint(juce::Graphics& g) override { g.fillAll(BG2); g.setColour(LINE); if (fxView.getX() > 0) g.fillRect(fxView.getX(), 0, 1, getHeight()); else g.fillRect(0, fxView.getY(), getWidth(), 1); }
+    void paint(juce::Graphics& g) override { fillPanel(g); g.setColour(LINE); if (fxView.getX() > 0) g.fillRect(fxView.getX(), 0, 1, getHeight()); else g.fillRect(0, fxView.getY(), getWidth(), 1); }
     bool keyPressed(const juce::KeyPress& k) override {
         const auto id = actionFor(k, "mixer"); auto* b = doc.bus(cur); if (id.isEmpty() || !b) return false;
         if (id == "mix.rename") renameBus(cur);
@@ -156,7 +156,7 @@ private:
         }
         void paint(juce::Graphics& g) override {
             auto r = getLocalBounds().toFloat().reduced(0.5f); const juce::Colour bg = master ? mix(ACCENT, BG2, 0.09f) : send ? mix(ACCENT2, BG2, 0.07f) : PANEL;
-            g.setColour(bg); g.fillRoundedRectangle(r, RAD()); g.setColour(sel ? ACCENT : LINE); g.drawRoundedRectangle(r, RAD(), 1);
+            g.setColour(bg.withMultipliedAlpha(panelAlpha())); g.fillRoundedRectangle(r, RAD()); g.setColour(sel ? ACCENT : LINE); g.drawRoundedRectangle(r, RAD(), 1);
             auto nr = name.getBounds(); g.setColour(ACCENT2); g.setFont(mono(FS * 0.82f * 0.86f)); const int nw = textW(mono(FS * 0.82f * 0.86f), num) + 5; g.drawText(num, nr.removeFromLeft(nw), juce::Justification::centredLeft);
             g.setColour(TEXT); g.setFont(fontB(FS * 0.86f)); g.drawText(title, nr, juce::Justification::centredLeft, true);
             // scope: a scrolling waveform, one column per frame (lowest / highest sample), scaled to the loudest column shown
@@ -260,7 +260,7 @@ private:
             for (auto* p : parts) if (p->getProperties()["role"] == "led") { auto* b = static_cast<Btn*>(p); auto l = b->getBounds().toFloat(); g.setColour(b->on() ? ACCENT : BG); g.fillEllipse(l); g.setColour(b->on() ? ACCENT.darker(0.4f) : LINE); g.drawEllipse(l.reduced(1), 2); }
         }
         void paint(juce::Graphics& g) override {
-            g.fillAll(BG2); g.setColour(TEXT); g.setFont(fontB(FS)); g.drawText(headText, 8, 8, getWidth() - addFx.getWidth() - 24, CTL() - 4, juce::Justification::centredLeft, true);
+            fillPanel(g); g.setColour(TEXT); g.setFont(fontB(FS)); g.drawText(headText, 8, 8, getWidth() - addFx.getWidth() - 24, CTL() - 4, juce::Justification::centredLeft, true);
             for (auto& c : cards) card(g, c.toFloat(), mix(BG3, BG2, 0.5f));
             if (cards.empty()) { g.setColour(DIM); g.setFont(font(FS * 0.88f)); g.drawFittedText("No effects on this bus. Add EQ, compression, reverb, delay, a peak controller for ducking and more, then toggle each slot on or off.", juce::Rectangle<int>(12, CTL() + 18, getWidth() - 24, 60), juce::Justification::topLeft, 4); }
         }

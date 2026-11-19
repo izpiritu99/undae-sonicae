@@ -123,7 +123,7 @@ public:
         if (top) { top->setBounds(r.removeFromTop(topH).reduced(8, 0).withTrimmedTop(8)); }
         view.setBounds(r); grid.layout(std::max(300, view.getWidth() - 10));
     }
-    void paint(juce::Graphics& g) override { g.fillAll(BG2); if (barH) vbarLine(g, barH, getWidth()); }
+    void paint(juce::Graphics& g) override { fillPanel(g); if (barH) vbarLine(g, barH, getWidth()); }
     void relayout() { grid.layout(std::max(300, view.getWidth() - 10)); }
     juce::Viewport view;
 };

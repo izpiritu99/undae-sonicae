@@ -30,8 +30,13 @@ inline const ThemeDef THEMES[] = {
 struct Style {
     float scale = 1, radius = 10, gridK = 1; int ctl = 30, pad = 6; bool glow = true, motion = true, light = false;
     std::string density = "cozy", stepShape = "lozenge", noteColor = "channel", theme = "slate"; bool bgOn = false;   // a background photo: panels see-through
+    float deckAlpha = 0.78f;   // how solid the decks are over a background photo (Settings › Theme › Deck transparency)
 };
 inline Style& style() { static Style s; return s; }
+inline float panelAlpha() { return style().bgOn ? style().deckAlpha : 1.f; }
+// A view's own background. Over a photo the deck behind it has already painted its see-through panel, so the view
+// paints nothing (painting BG2 again would stack and hide the photo).
+inline void fillPanel(juce::Graphics& g) { if (!style().bgOn) g.fillAll(BG2); }
 inline bool isTouch() {
 #if JUCE_ANDROID || JUCE_IOS
     return true;
@@ -121,7 +126,7 @@ inline void drawIcon(juce::Graphics& g, const std::string& name, juce::Rectangle
 }
 
 // --- painting helpers --------------------------------------------------------------------------------------------------
-inline void card(juce::Graphics& g, juce::Rectangle<float> r, juce::Colour bg = PANEL) { g.setColour(bg); g.fillRoundedRectangle(r, RAD()); g.setColour(LINE); g.drawRoundedRectangle(r.reduced(0.5f), RAD(), 1); }
+inline void card(juce::Graphics& g, juce::Rectangle<float> r, juce::Colour bg = PANEL) { g.setColour(bg.withMultipliedAlpha(panelAlpha())); g.fillRoundedRectangle(r, RAD()); g.setColour(LINE); g.drawRoundedRectangle(r.reduced(0.5f), RAD(), 1); }
 inline void cardTitle(juce::Graphics& g, const juce::String& t, juce::Rectangle<int> r) {   // .card h4: uppercase, spaced, dim
     g.setColour(DIM); auto f = fontB(FS * 0.82f); f.setExtraKerningFactor(0.09f); g.setFont(f); g.drawText(t.toUpperCase(), r, juce::Justification::centredLeft, true);
 }
@@ -384,7 +389,7 @@ private:
 };
 
 // .grp: the top bar's boxes
-inline void paintGrp(juce::Graphics& g, juce::Rectangle<int> r) { g.setColour(style().bgOn ? BG2.withAlpha(0.78f) : BG2); g.fillRoundedRectangle(r.toFloat(), RAD()); g.setColour(LINE); g.drawRoundedRectangle(r.toFloat().reduced(0.5f), RAD(), 1); }
+inline void paintGrp(juce::Graphics& g, juce::Rectangle<int> r) { g.setColour(BG2.withAlpha(panelAlpha())); g.fillRoundedRectangle(r.toFloat(), RAD()); g.setColour(LINE); g.drawRoundedRectangle(r.toFloat().reduced(0.5f), RAD(), 1); }
 
 // A dim caption (label, small)
 class Cap : public juce::Label {

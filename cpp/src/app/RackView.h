@@ -48,7 +48,7 @@ public:
         f.right(addB, addB.idealWidth());
         barH = f.layout(r); r.removeFromTop(barH); view.setBounds(r); rows.layout();
     }
-    void paint(juce::Graphics& g) override { g.fillAll(BG2); vbarLine(g, barH, getWidth()); }
+    void paint(juce::Graphics& g) override { fillPanel(g); vbarLine(g, barH, getWidth()); }
     // drop library sounds: onto a sampler's name to replace its sound, anywhere else for a new channel
     bool isInterestedInDragSource(const SourceDetails& s) override { return s.description.toString().startsWith("sample:"); }
     void itemDropped(const SourceDetails& s) override {

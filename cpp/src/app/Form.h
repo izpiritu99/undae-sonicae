@@ -57,9 +57,9 @@ private:
     struct Panel : juce::Component {
         Form* o = nullptr;
         void paint(juce::Graphics& g) override {
-            g.fillAll(BG2);
+            fillPanel(g);
             if (o->paintTop && o->topH) o->paintTop(g, { 8, 8, getWidth() - 16, o->topH - 8 });
-            for (auto& c : o->cards) { g.setColour(PANEL); g.fillRoundedRectangle(c.area.toFloat(), 9); g.setColour(DIM); g.setFont(juce::FontOptions(11.f, juce::Font::bold)); g.drawText(c.title.toUpperCase(), c.area.getX() + 10, c.area.getY() + 6, c.area.getWidth() - 20, 16, juce::Justification::centredLeft); }
+            for (auto& c : o->cards) { g.setColour(PANEL.withMultipliedAlpha(panelAlpha())); g.fillRoundedRectangle(c.area.toFloat(), 9); g.setColour(DIM); g.setFont(juce::FontOptions(11.f, juce::Font::bold)); g.drawText(c.title.toUpperCase(), c.area.getX() + 10, c.area.getY() + 6, c.area.getWidth() - 20, 16, juce::Justification::centredLeft); }
         }
     };
     juce::Viewport view; Panel panel; std::vector<Card> cards;

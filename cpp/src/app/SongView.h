@@ -50,7 +50,7 @@ public:
         vbar.setBounds(r.removeFromRight(10)); hbar.setBounds(r.removeFromBottom(10)); tl.setBounds(r);
         pal.layout(); tl.updateBars();
     }
-    void paint(juce::Graphics& g) override { g.fillAll(BG2); vbarLine(g, barH, getWidth()); if (pal.isVisible()) { g.setColour(LINE); g.fillRect(pal.getRight(), pal.getY(), 1, pal.getHeight()); } }
+    void paint(juce::Graphics& g) override { fillPanel(g); vbarLine(g, barH, getWidth()); if (pal.isVisible()) { g.setColour(LINE); g.fillRect(pal.getRight(), pal.getY(), 1, pal.getHeight()); } }
     // drops: library sounds (audio clips) and picker chips
     bool isInterestedInDragSource(const SourceDetails& s) override { const auto d = s.description.toString(); return d.startsWith("sample:") || d.startsWith("pick:"); }
     void itemDropped(const SourceDetails& s) override {
@@ -420,7 +420,7 @@ private:
         }
         void paint(juce::Graphics& g) override {
             auto& D = o->doc; auto& P = D.p; const float bw = o->bw, TH = o->TH, W = (float)getWidth(); const juce::Colour ink = style().light ? juce::Colours::black : juce::Colours::white; const float k = style().gridK;
-            g.fillAll(BG2);
+            fillPanel(g);
             const float top = (float)RUL, lt = lanesTop();
             g.saveState(); g.reduceClipRegion(0, RUL, getWidth(), getHeight() - RUL);
             const double ss = o->songSnap(); const double subB = ss > 0 && ss < 1 && bw * ss >= 7 ? ss : 1.0;

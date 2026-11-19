@@ -65,7 +65,7 @@ public:
         f.right(zoomOut, 30).right(zoomIn, 30);
         barH = f.layout(r); r.removeFromTop(barH); grid.setBounds(r);
     }
-    void paint(juce::Graphics& g) override { g.fillAll(BG2); vbarLine(g, barH, getWidth()); }
+    void paint(juce::Graphics& g) override { fillPanel(g); vbarLine(g, barH, getWidth()); }
 
 private:
     // the view state is kept for the session (the roll is rebuilt when a deck switches views)
@@ -248,7 +248,7 @@ private:
             auto& D = o->doc; auto* c = D.chan(); auto* p = D.patt(); const double L = p ? p->bars * D.p.bar() : D.p.bar(); const float gb = H() - VEL; const auto sc = o->scaleSet(); const int root = D.p.keyRoot;
             const juce::Colour ccol = c ? hex(c->color) : juce::Colour(0xff888888); const bool light = style().light; const float k = style().gridK; const juce::Colour ink = light ? juce::Colours::black : juce::Colours::white;
             auto a = [k](float x) { return std::min(1.f, x * k); };
-            g.fillAll(BG2);
+            fillPanel(g);
             g.saveState(); g.reduceClipRegion(juce::Rectangle<int>(KW(), RUL, getWidth() - KW(), (int)gb - RUL));
             const int n0 = juce::jlimit(0, 127, nOf(gb)), n1 = juce::jlimit(0, 127, nOf((float)RUL));
             for (int n = n0; n <= n1; n++) {

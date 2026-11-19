@@ -48,7 +48,7 @@ public:
     }
     ~SettingsView() override { doc.removeChangeListener(this); }
     void resized() override { layoutTabs(); view.setBounds(getLocalBounds().withTrimmedTop(tabH)); layout(); }
-    void paint(juce::Graphics& g) override { g.fillAll(BG2); g.setColour(LINE); g.fillRect(0, tabH - 1, getWidth(), 1); }
+    void paint(juce::Graphics& g) override { fillPanel(g); g.setColour(LINE); g.fillRect(0, tabH - 1, getWidth(), 1); }
 
 private:
     struct Tab : juce::Button { Tab(const juce::String& t) : juce::Button(t) { setMouseCursor(juce::MouseCursor::PointingHandCursor); }
@@ -57,7 +57,7 @@ private:
     struct Row { juce::String label, hint; juce::Component* ctl = nullptr; int w = 160, h = -1; bool full = false; };
     struct Page : juce::Component { SettingsView* o = nullptr;
         void paint(juce::Graphics& g) override {
-            g.fillAll(BG2);
+            fillPanel(g);
             for (auto& c : o->cards) { ui::card(g, c.area.toFloat(), PANEL); cardTitle(g, c.title, { c.area.getX() + 10, c.area.getY() + 8, c.area.getWidth() - 20, 16 });
                 for (auto& r : c.rows) { if (r.full) { g.setColour(DIM); g.setFont(font(FS * 0.88f)); g.drawFittedText(r.hint, r.labelR, juce::Justification::topLeft, 12); continue; }
                     g.setColour(TEXT); g.setFont(font(FS)); g.drawText(r.label, r.labelR.withHeight(18), juce::Justification::centredLeft, true);
@@ -154,7 +154,8 @@ private:
         row("Accent colour", hrow({ { acc, 90 }, { rst, 70 } }), "Overrides the theme accent", 166);
         auto* ph = btn(u8("Upload photo…"), [this] { chooser = std::make_unique<juce::FileChooser>("Background photo", juce::File::getSpecialLocation(juce::File::userPicturesDirectory), "*.jpg;*.jpeg;*.png");
             chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this](const juce::FileChooser& fc) { if (fc.getResult().existsAsFile()) { if (juce::ImageFileFormat::loadFrom(fc.getResult()).isValid()) { up("bgImage", fc.getResult().getFullPathName()); toast("Background set"); build(); } else toast("That image could not be used (too large or not an image)"); } }); }, true);
-        if (P().getValue("bgImage").isNotEmpty()) { auto* rm = btn("Remove", [this] { up("bgImage", ""); build(); }); row("Background photo", hrow({ { ph, 120 }, { rm, 80 } }), "Shown behind the panels", 206); row("Photo dimming", range("bgDim", 0.1, 0.95, 0.05, 0.6), "Higher = darker photo, easier reading"); }
+        if (P().getValue("bgImage").isNotEmpty()) { auto* rm = btn("Remove", [this] { up("bgImage", ""); build(); }); row("Background photo", hrow({ { ph, 120 }, { rm, 80 } }), "Shown behind the panels", 206); row("Photo dimming", range("bgDim", 0.1, 0.95, 0.05, 0.6), "Higher = darker photo, easier reading");
+            row("Deck transparency", range("deckAlpha", 0.15, 1, 0.05, 0.78), "How solid the decks are: lower shows more of the photo"); }
         else row("Background photo", ph, "Shown behind the panels", 120);
         row("Corners", range("radius", 0, 18, 1, 10)); row("Interface size", range("scale", 0.85, 1.3, 0.05, 1));
         row("Density", sel({ { "compact", "Compact" }, { "cozy", "Cozy" }, { "roomy", "Roomy" } }, P().getValue("density", "cozy"), [this](auto v) { up("density", v); }));

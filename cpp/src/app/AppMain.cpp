@@ -121,7 +121,7 @@ public:
     }
     void paint(juce::Graphics& g) override {
         auto r = getLocalBounds().toFloat(); juce::Path clip; clip.addRoundedRectangle(r, RAD()); g.saveState(); g.reduceClipRegion(clip);
-        const float al = style().bgOn ? 0.78f : 1.f; g.setColour(BG2.withAlpha(al)); g.fillRect(r); g.setColour(TABBG.withAlpha(al)); g.fillRect(tabBar.toFloat()); g.restoreState();
+        const float al = panelAlpha(); g.setColour(BG2.withAlpha(al)); g.fillRect(r); g.setColour(TABBG.withAlpha(al)); g.fillRect(tabBar.toFloat()); g.restoreState();
         if (floating && !minimized) { g.setColour(DIM); for (int i = 0; i < 3; i++) g.drawLine((float)getWidth() - 4 - i * 4, (float)getHeight() - 2, (float)getWidth() - 2, (float)getHeight() - 4 - i * 4, 1); }
     }
     void paintOverChildren(juce::Graphics& g) override { g.setColour(floating ? ACCENT : LINE); g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), RAD(), 1); }
@@ -660,6 +660,7 @@ private:
     void applyPrefs() {
         applyTheme(props->getValue("theme", "slate").toStdString(), props->getValue("accent", "").toStdString(), props->getValue("density", "cozy").toStdString(), (float)props->getDoubleValue("radius", 10), (float)props->getDoubleValue("scale", 1));
         auto& s = style(); s.glow = props->getBoolValue("glow", true); s.motion = props->getBoolValue("motion", true); s.stepShape = props->getValue("stepShape", "lozenge").toStdString(); s.noteColor = props->getValue("noteColor", "channel").toStdString(); s.gridK = (float)props->getDoubleValue("gridContrast", 1);
+        s.deckAlpha = (float)juce::jlimit(0.15, 1.0, props->getDoubleValue("deckAlpha", 0.78));
         if (auto* w = dynamic_cast<juce::DocumentWindow*>(getTopLevelComponent())) w->setBackgroundColour(BG);
     }
 
