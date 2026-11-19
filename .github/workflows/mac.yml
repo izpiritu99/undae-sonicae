@@ -1,0 +1,40 @@
+# Builds the macOS edition on GitHub's Intel Mac runner (the owner's tester has an Intel MacBook): universal app,
+# self-test, a short start-up check with a screenshot, and the .dmg as a downloadable artifact.
+name: macOS build
+
+on:
+  push:
+    branches: [windows, main]
+  workflow_dispatch:
+
+jobs:
+  mac:
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: brew install ninja lame
+
+      - name: JUCE 8.0.15 with the project's patch
+        run: |
+          git clone --depth 1 --branch 8.0.15 https://github.com/juce-framework/JUCE cpp/third_party/JUCE
+          git -C cpp/third_party/JUCE apply ../../patches/juce-android.patch
+
+      - name: Build, self-test, sign, pack
+        run: cpp/build-mac.sh Release
+
+      - name: Start-up check (screenshot of the demo song)
+        continue-on-error: true   # runners have no sound card; the screenshot is what matters here
+        run: |
+          APP="cpp/build-mac/UndaeSonicae_artefacts/Release/Undae Sonicae.app"
+          "$APP/Contents/MacOS/Undae Sonicae" cpp/examples/first-light.undae.json --snapshot "$PWD/cpp/dist/startup.png" --size 1360x860 --quit-after 6
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Undae-Sonicae-mac
+          path: |
+            cpp/dist/*.dmg
+            cpp/dist/startup.png
+          if-no-files-found: warn
