@@ -30,6 +30,7 @@ static void* openLame() {
         if (void* h = dlopen(n.toRawUTF8(), RTLD_NOW | RTLD_LOCAL)) return h;
     return nullptr;
 }
+static void* lameSym(void* h, const char* s) { return dlsym(h, s); }
 #else
 static void* openLame() { for (const char* n : { "libmp3lame.so.0", "libmp3lame.so" }) if (void* h = dlopen(n, RTLD_NOW | RTLD_LOCAL)) return h; return nullptr; }
 static void* lameSym(void* h, const char* s) { return dlsym(h, s); }
