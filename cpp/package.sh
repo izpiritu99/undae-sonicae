@@ -8,7 +8,9 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 VER=0.3.0
 B="$ROOT/cpp/build"
 cmake -S "$ROOT/cpp" -B "$B" -G Ninja -DCMAKE_BUILD_TYPE=Release > /dev/null
-cmake --build "$B" --target UndaeSonicae
+cmake --build "$B" --target UndaeSonicae undae-selftest
+"$B/undae-selftest_artefacts/Release/undae-selftest" "$ROOT/cpp/examples/first-light.undae.json" > "$B/selftest.log" 2>&1 || true
+tail -n 1 "$B/selftest.log"; grep -q "all passed" "$B/selftest.log" || { echo "self-test failed:"; cat "$B/selftest.log"; exit 1; }
 sh "$ROOT/native/build.sh" > /dev/null 2>&1 || true   # the plug-in hosts (skipped quietly when a compiler for them is missing)
 STAGE="$B/pkg"; rm -rf "$STAGE"; mkdir -p "$ROOT/dist"
 
@@ -67,8 +69,9 @@ echo "built dist/undae-sonicae-native_${VER}_amd64.deb"
 # runtime: the current static one if it is in ~/.cache/undae-sonicae (github.com/AppImage/type2-runtime, needs no libfuse2),
 # else electron-builder's older one (needs libfuse2 at run time)
 AI="$HOME/.cache/electron-builder/appimage/appimage-12.0.1"
-RT="$HOME/.cache/undae-sonicae/runtime-x86_64"; [ -f "$RT" ] || RT="$AI/runtime-x64"
-if [ -x "$AI/linux-x64/mksquashfs" ] && [ -f "$RT" ]; then
+RT="${APPIMAGE_RUNTIME:-$HOME/.cache/undae-sonicae/runtime-x86_64}"; [ -f "$RT" ] || RT="$AI/runtime-x64"
+MKSQ="$AI/linux-x64/mksquashfs"; [ -x "$MKSQ" ] || MKSQ="$(command -v mksquashfs || true)"   # electron-builder's, or squashfs-tools
+if [ -n "$MKSQ" ] && [ -x "$MKSQ" ] && [ -f "$RT" ]; then
   A="$STAGE/AppDir"; app "$A/usr/lib/undae-sonicae"
   cat > "$A/AppRun" << 'EOF'
 #!/bin/sh
@@ -79,7 +82,7 @@ EOF
   desktop undae-sonicae > "$A/undae-sonicae-native.desktop"
   cp "$ROOT/app/icons/icon-512.png" "$A/undae-sonicae-native.png"; ln -sf undae-sonicae-native.png "$A/.DirIcon"
   OUT="$ROOT/dist/Undae Sonicae Native-$VER.AppImage"
-  "$AI/linux-x64/mksquashfs" "$A" "$STAGE/app.squashfs" -root-owned -noappend -comp gzip -quiet > /dev/null
+  "$MKSQ" "$A" "$STAGE/app.squashfs" -root-owned -noappend -comp gzip -quiet > /dev/null
   cat "$RT" "$STAGE/app.squashfs" > "$OUT"; chmod +x "$OUT"
   echo "built dist/Undae Sonicae Native-$VER.AppImage"
 else
