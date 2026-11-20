@@ -11,12 +11,17 @@ on:
         description: "Version (the tag will be v<version>)"
         required: true
         default: "0.3.0"
+      platforms:
+        description: "Which to build: all, or a list like windows,linux (files of the others stay as they are)"
+        required: true
+        default: "all"
 
 permissions:
   contents: write
 
 jobs:
   windows:
+    if: inputs.platforms == 'all' || contains(inputs.platforms, 'windows')
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
@@ -41,6 +46,13 @@ jobs:
           $dll = Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" -Filter "*lame*.dll" | Select-Object -First 1
           Copy-Item $dll.FullName "cpp\build\UndaeSonicae_artefacts\Release\libmp3lame.dll"
           "bundled $($dll.Name) as libmp3lame.dll"
+      - name: Microsoft C++ runtime next to the app (app-local)
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          $crt = Get-ChildItem "$vs\VC\Redist\MSVC" -Recurse -Directory -Filter "Microsoft.VC14*.CRT" | Where-Object FullName -match '\\x64\\' | Where-Object FullName -notmatch 'onecore|debug' | Select-Object -First 1
+          foreach ($f in "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") { Copy-Item (Join-Path $crt.FullName $f) "cpp\build\UndaeSonicae_artefacts\Release\" }
+          "C++ runtime from $($crt.FullName)"
       - name: Installer (Inno Setup) and portable zip
         shell: pwsh
         run: |
@@ -50,7 +62,7 @@ jobs:
           & $iscc /Qp "/DAppVersion=$v" installer\windows.iss; if ($LASTEXITCODE) { exit 1 }
           $p = "dist\portable\Undae Sonicae"; New-Item -ItemType Directory -Force $p | Out-Null
           Copy-Item "cpp\build\UndaeSonicae_artefacts\Release\Undae Sonicae.exe", "native\bin\undae-vsthost.exe", "native\bin\undae-vsthost32.exe", "app\img\wordmark.png" $p
-          if (Test-Path "cpp\build\UndaeSonicae_artefacts\Release\libmp3lame.dll") { Copy-Item "cpp\build\UndaeSonicae_artefacts\Release\libmp3lame.dll" $p }
+          Copy-Item "cpp\build\UndaeSonicae_artefacts\Release\*.dll" $p   # LAME and the C++ runtime
           Compress-Archive -Path $p -DestinationPath "dist\Undae-Sonicae-$v-windows-portable.zip"
           Get-ChildItem dist -File
       - uses: actions/upload-artifact@v5
@@ -61,6 +73,7 @@ jobs:
             dist/*-windows-portable.zip
 
   mac:
+    if: inputs.platforms == 'all' || contains(inputs.platforms, 'mac')
     runs-on: macos-15-intel
     timeout-minutes: 60
     steps:
@@ -80,6 +93,7 @@ jobs:
           path: cpp/dist/*.dmg
 
   linux:
+    if: inputs.platforms == 'all' || contains(inputs.platforms, 'linux')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -113,6 +127,7 @@ jobs:
 
   publish:
     needs: [windows, mac, linux]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}   # also when some platforms were skipped
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

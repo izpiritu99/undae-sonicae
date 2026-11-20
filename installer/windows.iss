@@ -36,6 +36,10 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 [Files]
 Source: "{#BuildDir}\Undae Sonicae.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\libmp3lame.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+; Microsoft's C++ runtime, app-local (as Microsoft allows), so the app starts on a Windows without the VC++ redistributable
+Source: "{#BuildDir}\msvcp140.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#BuildDir}\vcruntime140.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#BuildDir}\vcruntime140_1.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\native\bin\undae-vsthost.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\native\bin\undae-vsthost32.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\app\img\wordmark.png"; DestDir: "{app}"; Flags: ignoreversion
