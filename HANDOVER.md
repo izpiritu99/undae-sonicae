@@ -1106,10 +1106,34 @@ the remote `tings`. Everything after 753c525 on `windows` is untested on Linux.
    from now on, and push the result back to wherever the canonical copy lives.
 8. **Anything else added on Windows**: each later Windows change that touches platform code (`PluginHost.cpp`,
    `Mp3.cpp`, `AppMain.cpp` CPU / RAM readout, CMake) gets a line here.
+0. **Linux is now built on GitHub (2026-11-20)**: the release workflow builds the current code on Ubuntu 24.04, the
+   self-test passes there, and the `.deb` and AppImage are on the release. Items 1-3 below still apply to the laptop's
+   own copy; item 2 is otherwise settled.
 9. **macOS preparation (2026-11-19)**: `PluginHost.cpp` gained `noSigPipe()` (a no-op on Linux, which keeps
    `MSG_NOSIGNAL`), `Mp3.cpp` and `AppMain.cpp` gained `__APPLE__` / `JUCE_MAC` branches, and `cpp/CMakeLists.txt` sets
    `CMAKE_OSX_DEPLOYMENT_TARGET` (ignored off Apple) and Apple-only `juce_add_gui_app` options. The Linux build should
    be unaffected; confirm with the self-test.
+
+## Releases on GitHub (2026-11-20)
+
+`.github/workflows/release.yml`, started by hand (Actions › Release, or `gh workflow run release.yml --ref windows -f
+version=0.3.0 [-f platforms=windows,linux]`), builds on GitHub's machines and publishes release `v<version>`, or
+replaces its files when it exists:
+- Windows (`windows-latest`, Visual Studio 2026, toolset 14.51): `build-win.bat`, self-test, LAME built by vcpkg
+  (`mp3lame:x64-windows`, its DLL exports every function `Mp3.cpp` uses), Microsoft's C++ runtime copied next to the app
+  from the newest redistributable (it must not be older than the compiler; the first try took 14.29 and was redone),
+  `installer/windows.iss` (Inno Setup, preinstalled there) and a portable zip.
+- macOS (`macos-15-intel`): `build-mac.sh` (universal app, plug-in host and LAME inside, ad hoc signature, `.dmg`).
+- Linux (`ubuntu-24.04`): JUCE's packages, `package.sh` under `xvfb-run` (now self-tests and makes the AppImage with
+  squashfs-tools and the static type2 runtime when electron-builder's tools are absent): `.deb` and AppImage.
+- Android is not built there: it is built on the owner's PC (`gradlew.bat assembleRelease` in `cpp/Builds/Android`,
+  JAVA_HOME = Android Studio's jbr, `local.properties` with the SDK path), so it keeps the signing key of the phone's
+  install, and added with `gh release upload v0.3.0 <apk>`. Do not run a Gradle build and an MSVC build at the same
+  time on that PC: clang crashed ("frontend command failed due to signal") once that way.
+
+Release notes: `installer/RELEASE_NOTES.md`. Release v0.3.0: https://github.com/izpiritu99/undae-sonicae/releases/tag/v0.3.0
+Commits that only touch docs or the release setup are marked `[skip ci]`, so they do not start the Mac test build (free
+private-repo minutes count macOS ten times).
 
 ## Native edition on macOS (plan, 2026-11-19)
 
@@ -1195,6 +1219,15 @@ CLAP on macOS.
 - Trackpad pinch was already handled (`mouseMagnify` in the piano roll and song grid); now in the mouse help.
 
 Not seen on a real Mac yet: the menu bar's look, the symbol glyphs in the app's font, Open With.
+
+### Intel-only plug-ins on Apple Silicon (2026-11-20, not tested on such a Mac)
+
+The universal `undae-pluginhost` runs twice on an Apple Silicon Mac with Rosetta (`HostSet::startJuceHost`): natively
+(into `clapP`) and through `/usr/bin/arch -x86_64` (into `win64`). Each copy reads the Mach-O header of a bundle's
+binary (`machArchs`) and lists only what it should serve (`servesHere`): the native copy every bundle with an arm64
+slice and every Audio Unit, the Rosetta copy (`sysctl.proc_translated`) bundles without one. Its scan results get
+`rosetta`, slots keep it, and `isWindowsSlot` sends them to the second host. Intel Macs and other platforms: one copy,
+unchanged (the Intel runner's Surge XT test still passes).
 
 ### Steps on a Mac
 

@@ -11,7 +11,14 @@ There are two editions in this repository:
 | **Native** (C++ / JUCE) | `cpp/` | The main edition, being developed. Windows, macOS, Linux, Android. |
 | Web (JavaScript, Web Audio) | `app/`, wrapped by Electron (`desktop/`) and Capacitor (`android/`) | The original. Kept working, but newer features are native-only. |
 
-## Get it running
+## Download
+
+Ready-made builds are on the [Releases page](https://github.com/izpiritu99/undae-sonicae/releases): a Windows
+installer and portable zip, a macOS `.dmg` (Intel and Apple Silicon), a Linux AppImage and `.deb`, and an Android APK.
+Each release lists how to open the files on each system (the Windows and Mac builds are not code-signed, so both systems
+ask once).
+
+## Build it yourself
 
 ### Native edition
 
@@ -20,6 +27,7 @@ There are two editions in this repository:
 | Windows | `cpp\build-win.bat` → `cpp\build\UndaeSonicae_artefacts\Release\Undae Sonicae.exe` | Visual Studio 2022 or its Build Tools ("Desktop development with C++") |
 | macOS | `cpp/build-mac.sh` → `cpp/dist/Undae-Sonicae-0.3.0-mac.dmg` (universal: Apple Silicon and Intel, macOS 11+) | Xcode command line tools, `brew install cmake ninja lame` |
 | macOS without a Mac | Push to GitHub: `.github/workflows/mac.yml` builds, tests and uploads the `.dmg` on an Intel Mac | A GitHub repository |
+| A release | Actions › Release › Run workflow (or `gh workflow run release.yml -f version=0.3.0`): Windows installer and zip, Mac `.dmg`, Linux AppImage and `.deb`, published as release `v<version>`; `platforms=windows` (etc.) rebuilds only some | A GitHub repository |
 | Linux | `cmake -S cpp -B cpp/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build cpp/build`; `sh cpp/package.sh` makes a `.deb` and an AppImage | gcc or clang, CMake, Ninja, JUCE's Linux packages |
 | Android | Projucer writes `cpp/Builds/Android` from `cpp/UndaeSonicae.jucer`, then `gradlew assembleRelease` | Android Studio (SDK, NDK, JDK) |
 
@@ -73,10 +81,12 @@ Opening a Mac build on another Mac: it is signed ad hoc, not notarised, so macOS
 ## Known limits
 
 - **macOS** is new: it builds and passes its tests on GitHub's Intel Mac, but has not yet been tried by a person on a
-  real Mac (sound, recording, plug-in editor windows). Plug-ins that are Intel-only do not load on Apple Silicon Macs
-  yet.
-- **Windows**: MP3 export needs `libmp3lame.dll` next to the app; no CLAP plug-ins yet; no ASIO driver (Windows Audio in
-  Exclusive or Low Latency mode is used for low delay).
+  real Mac (sound, recording, plug-in editor windows). Intel-only plug-ins on Apple Silicon run in a second host under
+  Rosetta; that path is untested.
+- **Windows**: no CLAP plug-ins yet; no ASIO driver (Windows Audio in Exclusive or Low Latency mode is used for low
+  delay). A self-built copy needs `libmp3lame.dll` next to the app for MP3 export (the release includes it).
+- **Android**: no desktop plug-ins (the platform cannot load them; Settings › Plug-in server uses a computer's over
+  Wi-Fi) and no MP3 export yet.
 - **Linux**: Windows VST plug-ins run through Wine.
 - Plug-in latency and the pitch correction's latency are not compensated yet, so such a track sits slightly late.
 - Audio to MIDI is reliable for one note at a time (voice, bass, lead); chord mode is best-effort.
@@ -95,7 +105,8 @@ cpp/                 native edition (see cpp/README.md)
 native/              plug-in hosts for Linux (host.c: CLAP, VST3) and Windows (win/vsthost.c: VST2, VST3), PROTOCOL.md
 app/                 web edition (index.html, css/, js/audio, js/ui)
 desktop/, android/   Electron and Capacitor shells for the web edition
-.github/workflows/   the macOS build on GitHub Actions
+.github/workflows/   the macOS test build and the release build on GitHub Actions
+installer/           Windows installer script (Inno Setup) and the release notes
 HANDOVER.md          detailed working notes: state, plans, platform specifics
 ```
 
