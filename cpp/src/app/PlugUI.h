@@ -12,6 +12,7 @@ inline juce::var slotFromScan(const juce::var& pl, bool inst) {
     auto* o = new juce::DynamicObject();
     o->setProperty("path", pl.getProperty("path", "")); o->setProperty("pid", pl.getProperty("id", "")); o->setProperty("name", pl.getProperty("name", "")); o->setProperty("fmt", pl.getProperty("format", ""));
     if ((bool)pl.getProperty("windows", false)) o->setProperty("windows", true); if ((int)pl.getProperty("bits", 64) == 32) o->setProperty("bits", 32); if (inst) o->setProperty("inst", true);
+    if ((bool)pl.getProperty("rosetta", false)) o->setProperty("rosetta", true);   // an Intel-only plug-in on an Apple Silicon Mac
     return juce::var(o);
 }
 
@@ -39,13 +40,15 @@ inline void choosePlugin(juce::Component* at, bool instruments, std::function<vo
                 shown.push_back(p); m.addItem((int)shown.size(), p.getProperty("name", "").toString() + (p.getProperty("vendor", "").toString().isNotEmpty() ? u8(" · ") + p.getProperty("vendor", "").toString() : juce::String())); }
         };
         group("CLAP", [](auto& p) { return p.getProperty("format", "") == "clap"; });
-        group("Audio Units", [](auto& p) { return p.getProperty("format", "") == "au"; });
+        auto native = [](auto& p) { return !(bool)p.getProperty("windows", false) && !(bool)p.getProperty("rosetta", false); };
+        group("Audio Units", [native](auto& p) { return p.getProperty("format", "") == "au" && native(p); });
 #if JUCE_LINUX
-        group("VST3 (Linux)", [](auto& p) { return p.getProperty("format", "") == "vst3" && !(bool)p.getProperty("windows", false); });
+        group("VST3 (Linux)", [native](auto& p) { return p.getProperty("format", "") == "vst3" && native(p); });
 #else
-        group("VST3", [](auto& p) { return p.getProperty("format", "") == "vst3" && !(bool)p.getProperty("windows", false); });
+        group("VST3", [native](auto& p) { return p.getProperty("format", "") == "vst3" && native(p); });
 #endif
-        group("VST2", [](auto& p) { return p.getProperty("format", "") == "vst2" && !(bool)p.getProperty("windows", false); });
+        group("VST2", [native](auto& p) { return p.getProperty("format", "") == "vst2" && native(p); });
+        group("Intel-only plug-ins (through Rosetta)", [](auto& p) { return (bool)p.getProperty("rosetta", false); });
         group("Windows VST (through Wine)", [](auto& p) { return (bool)p.getProperty("windows", false) && (int)p.getProperty("bits", 64) != 32; });
         group("Windows VST, 32-bit (through Wine)", [](auto& p) { return (bool)p.getProperty("windows", false) && (int)p.getProperty("bits", 64) == 32; });
 #if JUCE_WINDOWS

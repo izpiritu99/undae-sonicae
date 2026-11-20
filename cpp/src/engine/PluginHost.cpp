@@ -6,6 +6,9 @@
 #include "PluginHost.h"
 #include <cmath>
 #include <csignal>
+#if defined(__APPLE__)
+ #include <sys/sysctl.h>
+#endif
 #if !defined(_WIN32)
  #include <arpa/inet.h>
  #include <netdb.h>
@@ -170,6 +173,14 @@ static std::string extraPluginFolders() {
     juce::StringArray dirs; for (auto& f : juce::StringArray::fromTokens(env, ";", "")) if (f.trim().isNotEmpty()) dirs.add(f.trim());
     return dirs.joinIntoString("\n").toStdString();
 }
+#if defined(__APPLE__)
+// An Apple Silicon Mac with Rosetta: the (universal) host is started a second time as Intel code, for Intel-only
+// plug-ins, which cannot load into an arm64 process. Each copy lists only the plug-ins it should serve (HostMain.cpp).
+static bool appleSiliconWithRosetta() {
+    int arm = 0; size_t n = sizeof arm;
+    return sysctlbyname("hw.optional.arm64", &arm, &n, nullptr, 0) == 0 && arm == 1 && juce::File("/Library/Apple/usr/libexec/oah/libRosettaRuntime").exists();
+}
+#endif
 void HostSet::startJuceHost(const std::string& ser) {   // with m held
     const auto exe = juceHostExe(); if (!exe.existsAsFile()) return;
     juceOn = true; pending++;
@@ -179,6 +190,17 @@ void HostSet::startJuceHost(const std::string& ser) {   // with m held
         { std::lock_guard<std::mutex> l(m); clapP = p; }
         pending--;
     }).detach();
+#if defined(__APPLE__)
+    if (appleSiliconWithRosetta()) {
+        pending++;
+        std::thread([this, exe, ser] {
+            Proc p = spawn("/usr/bin/arch", { "-x86_64", exe.getFullPathName().toStdString(), "--child" }, { { "UNDAE_SERIAL", ser } }, 60);
+            p.ep.folder = extraPluginFolders();
+            { std::lock_guard<std::mutex> l(m); win64 = p; }
+            pending--;
+        }).detach();
+    }
+#endif
 }
 
 #if defined(_WIN32)
@@ -293,8 +315,8 @@ std::string HostSet::useServer(const std::string& addrIn, const std::string& cod
     return {};
 }
 
-static bool isWindowsSlot(const juce::var& s) {
-    if (HostSet::get().juceHost()) return false;   // the JUCE host takes every format
+static bool isWindowsSlot(const juce::var& s) {   // true: the second host (Windows VSTs; with the JUCE host, Intel-only plug-ins under Rosetta)
+    if (HostSet::get().juceHost()) return (bool)s.getProperty("rosetta", false);   // the JUCE host takes every format
     const auto fmt = s.getProperty("fmt", "").toString();
     if (fmt == "vst2") return true;
 #if defined(_WIN32)
@@ -383,7 +405,11 @@ static juce::var obj(std::initializer_list<std::pair<const char*, juce::var>> kv
 
 bool PluginInstance::load(const juce::var& slot, double sr, std::string& error) {
     const HostEndpoint ep = endpointFor(slot);
-    if (!ep.ok()) { error = isWindowsSlot(slot) ? (HostSet::get().winPending() ? "Wine is still starting" : "Windows plug-ins need Wine and the Windows plug-in host") : "The plug-in host is not running"; return false; }
+    if (!ep.ok()) {
+        if (HostSet::get().juceHost() && isWindowsSlot(slot)) error = HostSet::get().winPending() ? "The Intel plug-in host is still starting" : "This Intel-only plug-in needs Rosetta: run softwareupdate --install-rosetta, then restart Undae Sonicae";
+        else error = isWindowsSlot(slot) ? (HostSet::get().winPending() ? "Wine is still starting" : "Windows plug-ins need Wine and the Windows plug-in host") : "The plug-in host is not running";
+        return false;
+    }
     if (!connect(ep)) { error = "The plug-in host is not reachable"; return false; }
     juce::var r = request(obj({ { "op", "load" }, { "path", slot.getProperty("path", "") }, { "id", slot.getProperty("pid", "") }, { "sampleRate", sr } }), 60000);
     if (!(bool)r.getProperty("ok", false)) { error = r.getProperty("error", "The plug-in could not be loaded").toString().toStdString(); return false; }
@@ -440,7 +466,8 @@ std::vector<juce::var> scanPlugins() {
         if (auto* a = r.getProperty("plugins", juce::var()).getArray())
             for (auto& pl : *a) {
                 juce::var x = juce::JSON::parse(juce::JSON::toString(pl)); auto* o = x.getDynamicObject(); if (!o) continue;
-                if (windows) { o->setProperty("windows", true); if (bits == 32) o->setProperty("bits", 32); }
+                if (windows && HostSet::get().juceHost()) o->setProperty("rosetta", true);   // from the Intel copy of the JUCE host
+                else if (windows) { o->setProperty("windows", true); if (bits == 32) o->setProperty("bits", 32); }
                 std::lock_guard<std::mutex> lk(om); out.push_back(x);
             }
     };

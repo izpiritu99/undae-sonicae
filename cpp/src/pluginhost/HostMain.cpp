@@ -22,6 +22,9 @@
 #include <mutex>
 #include <shared_mutex>
 #include "Vst2.h"
+#if JUCE_MAC
+ #include <sys/sysctl.h>
+#endif
 
 namespace {
 
@@ -313,6 +316,36 @@ struct Vst2Plug : Plug, private juce::Timer {
     void timerCallback() override { if (e && win) e->dispatcher(e, vst2::effEditIdle, 0, 0, nullptr, 0); }
 };
 
+// ------------------------------------------------------------------------------------------------ which plug-ins this copy serves
+// On an Apple Silicon Mac the app runs this host twice: natively, and as Intel code under Rosetta for Intel-only
+// plug-ins (they cannot load into an arm64 process). The native copy serves bundles with an arm64 slice (and every Audio
+// Unit: macOS bridges those itself); the Rosetta copy serves only bundles without one. On an Intel Mac and elsewhere,
+// one copy serves everything.
+#if JUCE_MAC
+int machArchs(const juce::File& bin) {   // bit 1: x86_64, bit 2: arm64, from the Mach-O header (fat or thin)
+    juce::FileInputStream in(bin); if (!in.openedOk()) return 0;
+    const uint32_t magic = (uint32_t)in.readIntBigEndian(); int a = 0;
+    auto cpu = [&a](uint32_t c) { if (c == 0x01000007u) a |= 1; else if (c == 0x0100000Cu) a |= 2; };
+    if (magic == 0xCAFEBABEu || magic == 0xCAFEBABFu) {   // fat: big-endian table of (cputype, subtype, offset, size, align[, reserved])
+        const uint32_t n = (uint32_t)in.readIntBigEndian(); const bool f64 = magic == 0xCAFEBABFu;
+        for (uint32_t i = 0; i < n && i < 16; i++) { cpu((uint32_t)in.readIntBigEndian()); in.skipNextBytes(f64 ? 28 : 16); }
+    } else if (magic == 0xCFFAEDFEu) cpu((uint32_t)in.readInt());   // thin 64-bit, little-endian (MH_MAGIC_64 read big-endian)
+    return a;
+}
+bool sysctlOn(const char* name) { int v = 0; size_t n = sizeof v; return sysctlbyname(name, &v, &n, nullptr, 0) == 0 && v == 1; }
+bool underRosetta() { static const bool r = sysctlOn("sysctl.proc_translated"); return r; }
+bool appleSilicon() { static const bool a = sysctlOn("hw.optional.arm64"); return a; }
+bool servesHere(const juce::File& bundle) {
+    if (!appleSilicon()) return true;
+    const int a = machArchs(vst2Binary(bundle));
+    if (a == 0) return !underRosetta();   // unreadable: let the native copy try
+    return underRosetta() ? ((a & 1) && !(a & 2)) : (a & 2) != 0;
+}
+#else
+bool underRosetta() { return false; }
+bool servesHere(const juce::File&) { return true; }
+#endif
+
 bool isVst2Name(const juce::File& f) {
 #if JUCE_MAC
     return f.hasFileExtension("vst");
@@ -327,8 +360,10 @@ juce::String formatId(const juce::String& juceName) { return juceName == "VST3" 
 juce::Array<juce::var> scan(const juce::StringArray& extra) {   // message thread
     juce::Array<juce::var> out;
     for (auto* f : formats().getFormats()) {
+        const bool au = f->getName() == "AudioUnit"; if (au && underRosetta()) continue;   // the native copy lists every Audio Unit
         juce::FileSearchPath paths = f->getDefaultLocationsToSearch(); for (auto& x : extra) if (juce::File(x).isDirectory()) paths.addIfNotAlreadyThere(juce::File(x));
         for (auto& ident : f->searchPathsForPlugins(paths, true, false)) {
+            if (!au && !servesHere(juce::File(ident))) continue;   // the other copy (Apple Silicon / Rosetta) has this one
             juce::OwnedArray<juce::PluginDescription> ds;
             { std::unique_lock<std::shared_mutex> lk(loadLock); f->findAllTypesForFile(ds, ident); }
             for (auto* d : ds) out.add(obj({ { "id", d->createIdentifierString() }, { "name", d->name }, { "vendor", d->manufacturerName }, { "version", d->version },
@@ -343,6 +378,7 @@ juce::Array<juce::var> scan(const juce::StringArray& extra) {   // message threa
     std::function<void(const juce::File&, int)> walk = [&](const juce::File& dir, int depth) {
         for (auto& f : dir.findChildFiles(juce::File::findFilesAndDirectories, false)) {
             if (isVst2Name(f)) {
+                if (!servesHere(f)) continue;
                 juce::String err; std::unique_lock<std::shared_mutex> lk(loadLock); auto p = Vst2Plug::open(f, err); if (!p) continue;
                 out.add(obj({ { "id", p->id }, { "name", p->name }, { "vendor", p->vendor }, { "version", "" }, { "path", f.getFullPathName() }, { "format", "vst2" },
                               { "instrument", (p->e->flags & vst2::flagIsSynth) != 0 } }));
