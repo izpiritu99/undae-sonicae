@@ -46,7 +46,10 @@ set(US_APPLE_OPTS)
 if(APPLE)   # macOS asks before any app may use the microphone or an audio interface's inputs; without this text it refuses
   set(US_APPLE_OPTS
     MICROPHONE_PERMISSION_ENABLED TRUE
-    MICROPHONE_PERMISSION_TEXT "Undae Sonicae records from your microphone or audio interface when you arm recording.")
+    MICROPHONE_PERMISSION_TEXT "Undae Sonicae records from your microphone or audio interface when you arm recording."
+    # Projects are "*.undae.json", and macOS goes by the last extension only, so the app offers itself for .json files at
+    # the "Alternate" rank: it is listed under Open With (and can be made the default there) without taking .json over.
+    PLIST_TO_MERGE "<plist><dict><key>CFBundleDocumentTypes</key><array><dict><key>CFBundleTypeName</key><string>Undae Sonicae project</string><key>CFBundleTypeExtensions</key><array><string>json</string></array><key>CFBundleTypeRole</key><string>Editor</string><key>LSHandlerRank</key><string>Alternate</string></dict></array></dict></plist>")
   # No hardened runtime: the app is signed ad hoc and not notarised, and the runtime's library validation would stop
   # the plug-in host from loading other companies' plug-ins. Turn it on (with entitlements) only for notarised releases.
 endif()

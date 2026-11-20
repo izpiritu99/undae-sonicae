@@ -55,7 +55,7 @@ inline const std::vector<std::pair<const char*, const char*>>& mouseHelp() {
         { "Ctrl + wheel", "Zoom the piano roll or song timeline at the cursor" }, { "Alt + wheel", "Piano roll row height" }, { "Shift + wheel", "Scroll sideways" },
         { "Ctrl + drag", "Box-select notes or clips" }, { "Ctrl + click", "Add or remove one clip from the selection" }, { "Shift + click", "Add or remove one note" },
         { "Alt + drag", "Move song clips without snapping" }, { "Right-click", "Erase a note or a step, delete a clip, knob menu (reset, type a value, automation, MIDI controller link)" }, { "Double-click a note", "Set its velocity" },
-        { "Double-click a knob", "Reset it (Shift-drag for fine control)" }, { "Scroll on a bus box", "Step a rack channel through the mixer buses" }, { "Long press (touch)", "Same as right-click" }, { "Two fingers (touch)", "Pinch to zoom the piano roll and the playlist" },
+        { "Double-click a knob", "Reset it (Shift-drag for fine control)" }, { "Scroll on a bus box", "Step a rack channel through the mixer buses" }, { "Long press (touch)", "Same as right-click" }, { "Two fingers (touch)", "Pinch to zoom the piano roll and the playlist" }, { "Pinch (trackpad)", "Zoom the piano roll or song timeline" },
     };
     return m;
 }

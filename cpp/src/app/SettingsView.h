@@ -284,13 +284,13 @@ private:
             sec(title);
             for (auto& a : actions()) {
                 if (juce::String(a.scope) != scope) continue; const juce::String id = a.id; const bool changed = keymap().getDynamicObject() && keymap().getDynamicObject()->hasProperty(id);
-                auto* kc = own(new KeyCapture(keyOf(id))); if (changed) kc->rec = false;
-                kc->onKey = [this, id](const juce::String& c) { const auto other = clash(id, c); rebind(id, c); build(); toast(other.isNotEmpty() ? c + u8(" is also used by “") + other + u8("” - change one of them") : "Set to " + c); };
-                if (changed) { auto* r = btn(u8("↺"), [this, id] { rebind(id, {}); build(); }); r->setTooltip(juce::String("Back to the default: ") + a.key); row(a.label, hrow({ { kc, 130 }, { r, 30 } }), {}, 166); }
+                auto* kc = own(new KeyCapture(keyLabel(keyOf(id)))); if (changed) kc->rec = false;
+                kc->onKey = [this, id](const juce::String& c) { const auto other = clash(id, c); rebind(id, c); build(); toast(other.isNotEmpty() ? keyLabel(c) + u8(" is also used by “") + other + u8("” - change one of them") : "Set to " + keyLabel(c)); };
+                if (changed) { auto* r = btn(u8("↺"), [this, id] { rebind(id, {}); build(); }); r->setTooltip(juce::String("Back to the default: ") + keyLabel(a.key)); row(a.label, hrow({ { kc, 130 }, { r, 30 } }), {}, 166); }
                 else row(a.label, kc, {}, 130);
             }
         }
-        sec("Mouse (fixed)"); for (auto& [k, d] : mouseHelp()) { auto* c = small(k); c->setFont(mono(FS * 0.8f)); c->setColour(juce::Label::textColourId, ACCENT2); row(d, c, {}, 150); }
+        sec("Mouse (fixed)"); for (auto& [k, d] : mouseHelp()) { auto* c = small(keyLabel(k)); c->setFont(mono(FS * 0.8f)); c->setColour(juce::Label::textColourId, ACCENT2); row(d, c, {}, 150); }
         sec("Reset"); row("All shortcuts", btn("Restore defaults", [this] { keymap() = juce::var(new juce::DynamicObject()); if (saveKeymap()) saveKeymap()(); build(); toast("Shortcuts restored"); }), "Typing-keyboard notes (Z-M and Q-P rows) are set in the MIDI tab", 130);
     }
     void file() {

@@ -228,8 +228,8 @@ class HelpPanel : public juce::Component {
 public:
     HelpPanel() { addAndMakeVisible(view); view.setViewedComponent(&inner, false); view.setScrollBarsShown(true, false); setSize(560, 560); }
     void resized() override { view.setBounds(getLocalBounds().reduced(8)); int y = 4; const int w = view.getWidth() - 14; inner.rows.clear();
-        for (auto& [k, t] : scopes()) { inner.rows.push_back({ true, t, {} }); y += 30; for (auto& a : actions()) if (juce::String(a.scope) == k) { inner.rows.push_back({ false, keyOf(a.id), a.label }); y += 22; } }
-        inner.rows.push_back({ true, "Mouse and touch", {} }); y += 30; for (auto& [m, t] : mouseHelp()) { inner.rows.push_back({ false, m, t }); y += 22; }
+        for (auto& [k, t] : scopes()) { inner.rows.push_back({ true, t, {} }); y += 30; for (auto& a : actions()) if (juce::String(a.scope) == k) { inner.rows.push_back({ false, keyLabel(keyOf(a.id)), a.label }); y += 22; } }
+        inner.rows.push_back({ true, "Mouse and touch", {} }); y += 30; for (auto& [m, t] : mouseHelp()) { inner.rows.push_back({ false, keyLabel(m), t }); y += 22; }
         inner.rows.push_back({ false, {}, "Change any of the keys in Settings > Hotkeys. Single-letter keys play notes while the typing keyboard is on; click the Song, Piano Roll, Rack or Mixer first to use their letters." }); y += 50;
         inner.setSize(w, y + 8); }
     void paint(juce::Graphics& g) override { g.fillAll(BG2); }
@@ -322,10 +322,16 @@ public:
 #if JUCE_ANDROID
         gl.attachTo(*this);   // Android redraws the whole view in software for any change (about 0.2 s a frame at phone density); the GPU renderer repaints only what changed
 #endif
+#if JUCE_MAC
+        juce::MenuBarModel::setMacMainMenu(&macMenu, &macMenu.apple);   // Quit (⌘Q) is added by JUCE and asks systemRequestedQuit
+#endif
     }
     ~Main() override {
 #if JUCE_ANDROID
         gl.detach();
+#endif
+#if JUCE_MAC
+        juce::MenuBarModel::setMacMainMenu(nullptr);
 #endif
         stopTimer(); us::HostSet::get().stop(); devices.removeChangeListener(this); devices.removeMidiInputDeviceCallback({}, this); devices.removeAudioCallback(this); doc.removeChangeListener(this);
         knobHooks() = nullptr; toastSink() = nullptr; SongView::renderArmed() = nullptr; decks.clear(); juce::LookAndFeel::setDefaultLookAndFeel(nullptr); setLookAndFeel(nullptr); }
@@ -334,6 +340,63 @@ public:
         try { doc.load(f); doc.song = doc.p.songBars() > 0; doc.sendChangeMessage(); toast("Opened " + juce::String(doc.p.name)); }
         catch (const std::exception& e) { message("Could not open", e.what()); }
     }
+    // a project opened from outside (Finder, the Dock icon): the session so far is kept in the autosave first, as New does
+    void openFromOutside(const juce::File& f) {
+        if (doc.dirty) try { us::saveProject(doc.p, appDir().getChildFile("autosave.undae.json")); } catch (...) {}
+        open(f);
+    }
+
+#if JUCE_MAC
+    // --- the macOS menu bar: the same actions as the shortcuts and the project menu; labels follow the user's bindings ---
+    struct MacMenu : juce::MenuBarModel {
+        Main& o; std::map<int, std::function<void()>> fns; juce::PopupMenu apple;
+        explicit MacMenu(Main& m) : o(m) {
+            apple.addItem(9001, "About Undae Sonicae"); apple.addSeparator();
+            juce::PopupMenu::Item s(juce::String::fromUTF8("Settings\xe2\x80\xa6")); s.itemID = 9002; s.shortcutKeyDescription = keyLabel(keyOf("v.set")); apple.addItem(s);
+            fns[9001] = [] { message("Undae Sonicae", "Version 0.3.0, native edition.\nA pattern-based DAW: rack, piano roll, song, mixer, built-in instruments and effects, and AU / VST3 / VST2 plug-ins."); };
+            fns[9002] = [this] { o.runAction("v.set"); };
+        }
+        juce::StringArray getMenuBarNames() override { return { "File", "Edit", "View", "Transport", "Help" }; }
+        juce::PopupMenu getMenuForIndex(int index, const juce::String&) override {
+            juce::PopupMenu p; int id = 100 * (index + 1);
+            auto add = [&](const juce::String& t, std::function<void()> fn, const juce::String& key = {}, bool on = true, bool ticked = false) {
+                juce::PopupMenu::Item it(t); it.itemID = ++id; it.isEnabled = on; it.isTicked = ticked; it.shortcutKeyDescription = keyLabel(key); p.addItem(it); fns[id] = std::move(fn); };
+            auto act = [this](const juce::String& a) -> std::function<void()> { return [this, a] { o.runAction(a); }; };
+            const auto dots = juce::String::fromUTF8("\xe2\x80\xa6");
+            auto& d = o.doc; const bool song = d.p.songBars() > 0, mp3 = us::mp3Available();
+            if (index == 0) {
+                add("New Project", [this] { o.newProject(); });
+                add("Open" + dots, act("open"), keyOf("open"));
+                add("Reopen the Autosaved Session", [this] { o.reopenAutosave(); }, {}, appDir().getChildFile("autosave.undae.json").existsAsFile());
+                p.addSeparator();
+                add("Save", act("save"), keyOf("save")); add("Save As" + dots, act("saveAs"), keyOf("saveAs")); add("Save a New Version", act("saveNew"), keyOf("saveNew"));
+                p.addSeparator();
+                add("Export WAV (Song)", [this] { o.exportAudio(true, "wav"); }, keyOf("exportWav"), song); add(juce::String::fromUTF8("Export WAV (Pattern \xc3\x97" "4)"), [this] { o.exportAudio(false, "wav"); });
+                add(mp3 ? "Export MP3 (Song)" : "Export MP3 (needs LAME)", [this] { o.exportAudio(true, "mp3"); }, keyOf("exportComp"), song && mp3);
+                add("Export FLAC (Song)", [this] { o.exportAudio(true, "flac"); }, {}, song); add("Export Ogg Vorbis (Song)", [this] { o.exportAudio(true, "ogg"); }, {}, song);
+                add("Export MIDI", act("exportMidi"), keyOf("exportMidi")); add("Import MIDI into Channel" + dots, [this] { o.importMidiDialog(); });
+                p.addSeparator();
+                add("Show Backups in Finder", [] { backupDir().revealToUser(); });
+            } else if (index == 1) {
+                add("Undo", [&d] { d.undo(); }, keyOf("undo"), d.canUndo()); add("Redo", [&d] { d.redo(); }, keyOf("redo"), d.canRedo());
+            } else if (index == 2) {
+                for (auto& v : views()) add(v.label, act(juce::String("v.") + v.id), keyOf(juce::String("v.") + v.id));
+                p.addSeparator();
+                add("On-screen Keyboard", act("keys"), keyOf("keys"), true, o.props->getBoolValue("keys", false));
+                add("Switch Time Display", act("time"), keyOf("time"));
+            } else if (index == 3) {
+                add("Play / Stop", act("play"), keyOf("play")); add("Record", act("rec"), keyOf("rec"));
+                add("Metronome", act("metro"), keyOf("metro"), true, o.engine.metronome.load()); add("Pattern / Song Mode", act("mode"), keyOf("mode"));
+                p.addSeparator(); add("Stop All Sound", act("panic"), keyOf("panic"));
+            } else if (index == 4) {
+                add("Keyboard Shortcuts and Help", [this] { o.showHelp(); }, keyOf("manual"));
+            }
+            return p;
+        }
+        void menuItemSelected(int id, int) override { auto it = fns.find(id); if (it != fns.end() && it->second) { auto f = it->second; f(); } }
+    };
+    MacMenu macMenu{ *this };
+#endif
     bool okToQuit() {
         if (!doc.dirty) return true;
         juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::QuestionIcon, "Unsaved changes", "Save before quitting?", "Save", "Quit without saving", nullptr,
@@ -1016,7 +1079,15 @@ public:
     }
     void shutdown() override { win = nullptr; }
     void systemRequestedQuit() override { if (static_cast<ui::Main*>(win->getContentComponent())->okToQuit()) quit(); }
-    void anotherInstanceStarted(const juce::String&) override {}
+    // macOS sends projects opened from Finder ("Open With", a double-click once the app is the default for them) or dropped
+    // on the Dock icon here, at start-up too
+    void anotherInstanceStarted(const juce::String& cmd) override {
+        if (!win) return; auto* m = static_cast<ui::Main*>(win->getContentComponent());
+        for (auto& a : juce::StringArray::fromTokens(cmd, true)) {
+            const auto f = juce::File::getCurrentWorkingDirectory().getChildFile(a.unquoted());
+            if (f.existsAsFile() && f.hasFileExtension("json")) { m->openFromOutside(f); win->toFront(true); return; }
+        }
+    }
     struct Window : juce::DocumentWindow {
         Window() : DocumentWindow("Undae Sonicae", ui::BG, allButtons) {
             setUsingNativeTitleBar(true); setContentOwned(new ui::Main(), true);

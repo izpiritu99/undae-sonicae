@@ -426,12 +426,28 @@ inline void message(const juce::String& title, const juce::String& msg) { juce::
 // menus at a component (menuAt) or at the mouse
 inline juce::PopupMenu::Options at(juce::Component* c) { return juce::PopupMenu::Options().withTargetComponent(c).withMinimumWidth(190); }
 inline juce::PopupMenu::Options atMouse() { return juce::PopupMenu::Options().withMousePosition().withMinimumWidth(190); }
+// Shortcut text as shown. Bindings are stored as "Ctrl+Shift+Alt+Key" on every platform (on a Mac, ⌘ and Ctrl both
+// work); on macOS they show with the Mac symbols, in Apple's order (⌥⇧⌘), and the mouse help ("Ctrl + wheel") too.
+inline juce::String keyLabel(const juce::String& s) {
+#if JUCE_MAC
+    if (s.contains(" + ")) return s.replace("Ctrl + ", juce::String::fromUTF8("\xe2\x8c\x98 ")).replace("Alt + ", juce::String::fromUTF8("\xe2\x8c\xa5 ")).replace("Shift + ", juce::String::fromUTF8("\xe2\x87\xa7 "));
+    juce::String k = s; bool c = false, sh = false, a = false;
+    for (;;) { if (k.startsWith("Ctrl+")) { c = true; k = k.substring(5); } else if (k.startsWith("Shift+")) { sh = true; k = k.substring(6); } else if (k.startsWith("Alt+")) { a = true; k = k.substring(4); } else break; }
+    static const std::pair<const char*, const char*> names[] = { { "ArrowUp", "\xe2\x86\x91" }, { "ArrowDown", "\xe2\x86\x93" }, { "ArrowLeft", "\xe2\x86\x90" }, { "ArrowRight", "\xe2\x86\x92" },
+        { "Backspace", "\xe2\x8c\xab" }, { "Delete", "\xe2\x8c\xa6" }, { "Del", "\xe2\x8c\xa6" }, { "Enter", "\xe2\x86\xa9" }, { "Escape", "\xe2\x8e\x8b" }, { "Tab", "\xe2\x87\xa5" } };
+    for (auto& [from, to] : names) if (k == from) k = juce::String::fromUTF8(to);
+    return juce::String(a ? juce::String::fromUTF8("\xe2\x8c\xa5") : juce::String()) + (sh ? juce::String::fromUTF8("\xe2\x87\xa7") : juce::String()) + (c ? juce::String::fromUTF8("\xe2\x8c\x98") : juce::String()) + k;
+#else
+    return s;
+#endif
+}
+
 // a menu built from lambdas: items carry their own action
 struct Menu {
     juce::PopupMenu m; std::vector<std::function<void()>> fns;
     Menu& head(const juce::String& t) { m.addSectionHeader(t); return *this; }
     Menu& item(const juce::String& t, std::function<void()> fn, bool enabled = true, bool ticked = false, const juce::String& hint = {}) {
-        fns.push_back(std::move(fn)); juce::PopupMenu::Item it(t); it.itemID = (int)fns.size(); it.isEnabled = enabled; it.isTicked = ticked; it.shortcutKeyDescription = hint; m.addItem(it); return *this; }
+        fns.push_back(std::move(fn)); juce::PopupMenu::Item it(t); it.itemID = (int)fns.size(); it.isEnabled = enabled; it.isTicked = ticked; it.shortcutKeyDescription = keyLabel(hint); m.addItem(it); return *this; }
     Menu& sep() { m.addSeparator(); return *this; }
     Menu& sub(const juce::String& t, Menu& s, bool enabled = true) {   // the sub-menu's actions are moved in, ids offset
         juce::PopupMenu sm; const int base = (int)fns.size(); for (auto& f : s.fns) fns.push_back(std::move(f));
