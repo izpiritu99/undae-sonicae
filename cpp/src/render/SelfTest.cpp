@@ -9,6 +9,7 @@
 #include "engine/SoundDesign.h"
 #include "engine/Effects.h"
 #include "engine/Voices.h"
+#include "engine/Writer.h"
 #include "app/Presets.h"
 
 static int fails = 0;
@@ -98,7 +99,7 @@ int main(int argc, char** argv) {
     {
         const juce::File wav = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("undae-import-test.wav");
         { juce::AudioBuffer<float> b(1, 24000); for (int i = 0; i < 24000; i++) b.setSample(0, i, 0.5f * (float)std::sin(i * 2 * 3.14159265 * 440 / 48000)); wav.deleteFile();
-          juce::WavAudioFormat f; std::unique_ptr<juce::AudioFormatWriter> w(f.createWriterFor(new juce::FileOutputStream(wav), 48000, 1, 16, {}, 0)); w->writeFromAudioSampleBuffer(b, 0, 24000); }
+          juce::WavAudioFormat f; auto w = us::makeWriter(f, std::make_unique<juce::FileOutputStream>(wav), 48000, 1, 16); w->writeFromAudioSampleBuffer(b, 0, 24000); }
         ui::Doc d3(eng, *bank); d3.setProject(ui::blankProject());
         const std::string id = d3.importAudio(wav);
         check(!id.empty() && bank->get(id) && std::abs(bank->get(id)->seconds() - 0.5) < 0.01, "audio file imported (0.5 s)");
@@ -377,7 +378,7 @@ int main(int argc, char** argv) {
         {
             auto wavOf = [&](double hz, const char* name) { const juce::File w = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name); w.deleteFile(); juce::AudioBuffer<float> b(1, 48000);
                 for (int i = 0; i < 48000; i++) b.setSample(0, i, 0.4f * (float)std::sin(i * 2 * 3.14159265358979 * hz / 48000)); juce::WavAudioFormat f;
-                std::unique_ptr<juce::AudioFormatWriter> wr(f.createWriterFor(new juce::FileOutputStream(w), 48000, 1, 16, {}, 0)); wr->writeFromAudioSampleBuffer(b, 0, 48000); return w; };
+                auto wr = us::makeWriter(f, std::make_unique<juce::FileOutputStream>(w), 48000, 1, 16); wr->writeFromAudioSampleBuffer(b, 0, 48000); return w; };
             const juce::File w1 = wavOf(220, "undae-zone-a3.wav"), w2 = wavOf(880, "undae-zone-a5.wav");
             ui::Doc dz(eng, *bank); dz.setProject(ui::blankProject()); const std::string id1 = dz.importAudio(w1), id2 = dz.importAudio(w2); w1.deleteFile(); w2.deleteFile();
             auto renderZones = [&](std::vector<us::Zone> zones, std::vector<std::pair<int, double>> notes) {
@@ -489,7 +490,7 @@ int main(int argc, char** argv) {
         {
             const juce::File iw = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("undae-ir-test.wav"); iw.deleteFile();
             { juce::AudioBuffer<float> b(1, 24000); b.clear(); b.setSample(0, 0, 0.8f); b.setSample(0, 4410, 0.4f); juce::WavAudioFormat f;
-              std::unique_ptr<juce::AudioFormatWriter> wr(f.createWriterFor(new juce::FileOutputStream(iw), 44100, 1, 24, {}, 0)); wr->writeFromAudioSampleBuffer(b, 0, 24000); }
+              auto wr = us::makeWriter(f, std::make_unique<juce::FileOutputStream>(iw), 44100, 1, 24); wr->writeFromAudioSampleBuffer(b, 0, 24000); }
             ui::Doc di(eng, *bank); di.setProject(ui::blankProject()); const std::string irId = di.importAudio(iw); iw.deleteFile();
             auto ir = ui::newFx("irverb"); ir.p.set("ir", juce::String(irId)); ir.p.set("mix", 1.0);
             auto e = us::makeEffect("irverb"); e->samples = bank.get(); e->prepare(sr, 512); e->set(ir);

@@ -4,6 +4,7 @@
 #include <iostream>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "../engine/Engine.h"
+#include "../engine/Writer.h"
 
 int main(int argc, char** argv) {
     if (argc < 3) { std::cerr << "usage: undae-render <project.undae.json> <out.wav> [--pattern NAME] [--loops N] [--rate HZ] [--bits 16|24|32]\n"; return 2; }
@@ -29,7 +30,7 @@ int main(int argc, char** argv) {
         auto buf = eng.render(mode, pid, loops, rate);
         juce::File out = juce::File::getCurrentWorkingDirectory().getChildFile(argv[2]); out.deleteFile();
         juce::WavAudioFormat wav;
-        std::unique_ptr<juce::AudioFormatWriter> w(wav.createWriterFor(new juce::FileOutputStream(out), rate, 2, bits, {}, 0));
+        auto w = us::makeWriter(wav, std::make_unique<juce::FileOutputStream>(out), rate, 2, bits);
         if (!w) throw std::runtime_error("Cannot write " + out.getFullPathName().toStdString());
         w->writeFromAudioSampleBuffer(buf, 0, buf.getNumSamples());
         const double secs = buf.getNumSamples() / rate, took = (juce::Time::getMillisecondCounterHiRes() - t0) / 1000.0;

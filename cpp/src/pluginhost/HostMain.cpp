@@ -159,7 +159,7 @@ struct JucePlug : Plug, juce::AudioProcessorListener {
     juce::String showGui() override {
         if (win) { win->setVisible(true); win->toFront(true); return {}; }
         if (!inst->hasEditor()) return "This plug-in has no window of its own";
-        ed.reset(inst->createEditorIfNeeded()); if (!ed) return "The plug-in could not open its window";
+        ed.reset(inst->createEditorAndMakeActive()); if (!ed) return "The plug-in could not open its window";
         win = std::make_unique<PluginWindow>(name); win->onClose = [this] { askClose(); };
         win->setContentNonOwned(ed.get(), true); win->setResizable(ed->isResizable(), false);
         win->centreWithSize(win->getWidth(), win->getHeight()); win->setVisible(true); win->toFront(true);

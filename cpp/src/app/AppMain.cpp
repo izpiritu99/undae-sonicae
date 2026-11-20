@@ -12,6 +12,7 @@
 #include "Doc.h"
 #include "Keys.h"
 #include "engine/Mp3.h"
+#include "engine/Writer.h"
 #include "MixerView.h"
 #include "DesignView.h"
 #include "InstView.h"
@@ -545,7 +546,7 @@ public:
             g.restoreState();
             const juce::String db = mHold <= 0.001f ? u8("-∞ dB") : (mHold >= 1 ? "+" : "") + juce::String(20 * std::log10(mHold), 1) + " dB";
             auto t = meterR.withTop((int)bar.getBottom() + 2).withHeight(13); g.setFont(mono(FS * 0.74f)); const int w1 = textW(mono(FS * 0.64f), "MASTER  "), w2 = textW(mono(FS * 0.74f), db); int x = t.getCentreX() - (w1 + w2) / 2;
-            if (getWidth() >= 1120) { g.setColour(DIM); g.setFont(mono(FS * 0.64f)); g.drawText("MASTER  ", x, t.getY(), w1, t.getHeight(), juce::Justification::centredLeft); } else x = t.getCentreX() - w2 / 2, w1 == 0;
+            if (getWidth() >= 1120) { g.setColour(DIM); g.setFont(mono(FS * 0.64f)); g.drawText("MASTER  ", x, t.getY(), w1, t.getHeight(), juce::Justification::centredLeft); } else x = t.getCentreX() - w2 / 2;
             g.setColour(mHold >= 1 ? RECLT : DIM); g.setFont(mono(FS * 0.74f)); g.drawText(db, getWidth() >= 1120 ? x + w1 : x, t.getY(), w2 + 2, t.getHeight(), juce::Justification::centredLeft);
         }
         if (statsR.getWidth() > 0) {
@@ -880,8 +881,8 @@ private:
         std::unique_ptr<juce::AudioFormat> af; int quality = 0;
         if (fmt == "flac") { af = std::make_unique<juce::FlacAudioFormat>(); bits = 24; } else if (fmt == "ogg") { af = std::make_unique<juce::OggVorbisAudioFormat>(); bits = 16; quality = 8; } else af = std::make_unique<juce::WavAudioFormat>();
         auto os = std::make_unique<juce::FileOutputStream>(f); if (os->failedToOpen()) throw std::runtime_error("Cannot write " + f.getFullPathName().toStdString());
-        std::unique_ptr<juce::AudioFormatWriter> w(af->createWriterFor(os.get(), rate, 2, bits, {}, quality));
-        if (!w) throw std::runtime_error("This format cannot be written here"); os.release();
+        auto w = us::makeWriter(*af, std::move(os), rate, 2, bits, quality);
+        if (!w) throw std::runtime_error("This format cannot be written here");
         w->writeFromAudioSampleBuffer(buf, 0, buf.getNumSamples());
     }
     // Alt+R in the Mixer: one WAV per armed bus, with only the channels and audio clips that reach that bus playing
@@ -955,7 +956,7 @@ private:
         for (auto& b : doc.p.buses) {
             if (!b.arm || b.input.empty() || b.kind == "master") continue; const int ch = juce::jlimit(0, 7, juce::String(b.input).getIntValue() - 1); const int ch2 = b.stereo ? std::min(7, ch + 1) : ch;
             juce::AudioBuffer<float> one(2, takeLen); one.copyFrom(0, 0, take, ch, 0, takeLen); one.copyFrom(1, 0, take, ch2, 0, takeLen);
-            juce::MemoryBlock mb; { auto mo = std::make_unique<juce::MemoryOutputStream>(mb, false); juce::WavAudioFormat wav; std::unique_ptr<juce::AudioFormatWriter> w(wav.createWriterFor(mo.get(), takeRate, 2, 24, {}, 0)); if (w) { mo.release(); w->writeFromAudioSampleBuffer(one, 0, takeLen); } }
+            juce::MemoryBlock mb; { juce::WavAudioFormat wav; if (auto w = us::makeWriter(wav, std::make_unique<juce::MemoryOutputStream>(mb, false), takeRate, 2, 24)) w->writeFromAudioSampleBuffer(one, 0, takeLen); }
             auto id = doc.addSampleData("Take " + std::to_string(takeNo++) + " " + b.name, mb);
             if (!id.empty()) { doc.placeAudio(id, takeStartTick / doc.p.bar()); if (!doc.p.audio.empty()) { doc.p.audio.back().bus = b.id; doc.commit(); } }
         }

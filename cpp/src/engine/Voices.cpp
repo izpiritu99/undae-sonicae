@@ -160,7 +160,7 @@ private:
     Adsr amp, fenv, menv, menv2; Lfo lfo[3]; Glider bend;
     double killAt = -1, killFrom = 0;
     // physical model (ModelP): 1 = plucked string, 2 = struck modes
-    int mtype = 0; std::vector<float> sbuf, burst; size_t sw = 0, bk = 0; double sLp = 0, sC = 0.5, sDec = 0.99, mDecay = 2;
+    int mtype = 0; std::vector<float> sbuf, burst; size_t sw = 0, bk = 0; double sLp = 0, sC = 0.5, mDecay = 2;
     int nm = 0; double mw[8] = {}, ma1[8] = {}, ma2[8] = {}, mg[8] = {}, my1[8] = {}, my2[8] = {};
     void initModel(double sr) {
         Rng& r = globalRng(); const ModelP& M = P.pm; mDecay = std::max(0.05, M.decay);

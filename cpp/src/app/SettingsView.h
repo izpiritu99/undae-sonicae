@@ -166,7 +166,7 @@ private:
     struct AccentPick : juce::ColourSelector { std::function<void(juce::Colour)> fn; AccentPick() : juce::ColourSelector(showColourspace | showSliders) { setSize(300, 280); } ~AccentPick() override { if (fn) fn(getCurrentColour()); } };
     void pickAccent() { auto cs = std::make_unique<AccentPick>(); cs->setCurrentColour(ACCENT); cs->fn = [this, sp = juce::Component::SafePointer<SettingsView>(this)](juce::Colour c) { juce::MessageManager::callAsync([sp, c] { if (sp) { sp->up("accent", juce::String(toHex(c))); sp->build(); } }); };
         juce::CallOutBox::launchAsynchronously(std::move(cs), getScreenBounds().withSizeKeepingCentre(10, 10), nullptr); }
-    static bool narrowScreen() { if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()) return d->userArea.getWidth() < 760; return false; }   // the app's own default for phones
+    static bool narrowScreen() { if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()) return d->userBounds.getWidth() < 760; return false; }   // the app's own default for phones
     void general() {
         sec("Layout");
         row("Workspace", sel({ { "single", "One deck" }, { "stack", "Two decks, stacked" }, { "side", "Two decks, side by side" }, { "tri", "Three decks (one wide, two below)" }, { "quad", "Four decks (2 x 2)" } }, P().getValue("layout", narrowScreen() ? "single" : "stack"), [this](auto v) { up("layout", v); }), "Any view can live in any deck. Phones always use one deck.", 210);

@@ -2,6 +2,7 @@
 #include "PluginHost.h"
 #include "Dsp.h"
 #include "Effects.h"
+#include "Writer.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 
 namespace us {
@@ -72,9 +73,8 @@ std::shared_ptr<Sample> renderDesign(const DesignP& D, const SampleBank& bank) {
 juce::MemoryBlock wavBytes(const Sample& s, int bits) {
     juce::MemoryBlock mb; juce::AudioBuffer<float> b((int)s.ch.size(), (int)s.length());
     for (size_t c = 0; c < s.ch.size(); c++) b.copyFrom((int)c, 0, s.ch[c].data(), (int)s.length());
-    auto mo = std::make_unique<juce::MemoryOutputStream>(mb, false); juce::WavAudioFormat wav;
-    std::unique_ptr<juce::AudioFormatWriter> w(wav.createWriterFor(mo.get(), s.sr, (unsigned)s.ch.size(), bits, {}, 0));
-    if (w) { mo.release(); w->writeFromAudioSampleBuffer(b, 0, b.getNumSamples()); }
+    juce::WavAudioFormat wav;
+    if (auto w = makeWriter(wav, std::make_unique<juce::MemoryOutputStream>(mb, false), s.sr, (int)s.ch.size(), bits)) w->writeFromAudioSampleBuffer(b, 0, b.getNumSamples());
     return mb;
 }
 
