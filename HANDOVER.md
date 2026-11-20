@@ -1182,6 +1182,20 @@ Not checked yet (needs a person at a Mac): plug-in editor windows, a real VST2 `
 Not done: Intel-only plug-ins on Apple Silicon (a second, x86_64 host under Rosetta, like the 32-bit host on Windows);
 CLAP on macOS.
 
+### Mac polish (2026-11-19, run 44642430354 green)
+
+- Menu bar (`Main::MacMenu`, a `juce::MenuBarModel` set with `setMacMainMenu`): File, Edit, View, Transport, Help, plus
+  About and Settings in the app menu; Quit comes from JUCE and goes through `systemRequestedQuit` (the unsaved-changes
+  question). Items run the same `runAction` ids as the shortcuts; labels use `keyOf`, so rebinding shows there.
+- `keyLabel()` (Theme.h): Mac symbols for shortcuts (⌥⇧⌘, arrows, ⌫ / ⌦, ↩, ⎋, ⇥) in menus, the help, Settings ›
+  Hotkeys and the mouse help. Stored bindings stay "Ctrl+..." everywhere; Ctrl and ⌘ both trigger them.
+- Finder: `CFBundleDocumentTypes` for `.json` at `LSHandlerRank` Alternate (macOS goes by the last extension, so
+  `.undae.json` cannot be claimed on its own): the app is under Open With and can be made the default per user;
+  `anotherInstanceStarted` opens the file (Finder, Dock icon drop), saving a dirty session to the autosave first.
+- Trackpad pinch was already handled (`mouseMagnify` in the piano roll and song grid); now in the mouse help.
+
+Not seen on a real Mac yet: the menu bar's look, the symbol glyphs in the app's font, Open With.
+
 ### Steps on a Mac
 
 1. **Set up**: Xcode command line tools (`xcode-select --install`), Homebrew, `brew install cmake ninja lame`. Copy the
